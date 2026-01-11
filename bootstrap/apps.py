@@ -20,6 +20,7 @@ class AppTag(Enum):
     EDITOR = "editeur"
     SHELL = "shell"
     CONTAINER = "container"
+    FONT = "police"
 
 
 @dataclass
@@ -33,6 +34,7 @@ class AppInfo:
     module: Optional[str] = None  # Python module to import for installation
     macos_app_paths: Optional[list[str]] = None  # macOS .app paths to check
     tags: list[AppTag] = field(default_factory=list)  # Tags for categorization
+    custom_check: Optional[str] = None  # Custom check type (e.g., "font")
 
 
 # Registry of all available applications
@@ -101,5 +103,15 @@ AVAILABLE_APPS = [
         version_command=None,
         module="alias_installer.app",
         tags=[AppTag.ALIAS]
+    ),
+    AppInfo(
+        id="nerd-font",
+        name="Nerd Font",
+        description="Polices avec icones pour terminal (requises pour theme agnoster)",
+        check_command="brew",  # Will use custom check
+        version_command=None,
+        module="font_installer.app",
+        tags=[AppTag.FONT],
+        custom_check="font"
     ),
 ]

@@ -96,6 +96,7 @@ class BootstrapApp:
             AppTag.EDITOR: Colors.GREEN,
             AppTag.SHELL: Colors.YELLOW,
             AppTag.CONTAINER: Colors.RED,
+            AppTag.FONT: Colors.WHITE,
         }
 
         formatted_tags = []
@@ -108,6 +109,10 @@ class BootstrapApp:
     def check_app_status(self, app: AppInfo) -> tuple[AppStatus, Optional[str]]:
         """Check if an application is installed and get its version."""
         import os
+
+        # Handle custom checks
+        if app.custom_check == "font":
+            return self._check_font_installed()
 
         # Check if command exists in PATH
         command_exists = shutil.which(app.check_command) is not None
@@ -143,6 +148,51 @@ class BootstrapApp:
             version = "(commande 'code' non configurée)"
 
         return AppStatus.INSTALLED, version
+
+    def _check_font_installed(self) -> tuple[AppStatus, Optional[str]]:
+        """Check if any Nerd Font is installed."""
+        import os
+        import platform
+
+        system = platform.system().lower()
+
+        if system == "darwin":
+            # macOS: Check via Homebrew cask
+            brew_path = shutil.which("brew")
+            if brew_path:
+                try:
+                    result = subprocess.run(
+                        [brew_path, "list", "--cask"],
+                        capture_output=True,
+                        text=True,
+                        timeout=10
+                    )
+                    if result.returncode == 0:
+                        casks = result.stdout.lower()
+                        if "nerd-font" in casks:
+                            # Find which font is installed
+                            for line in result.stdout.split('\n'):
+                                if "nerd-font" in line.lower():
+                                    return AppStatus.INSTALLED, line.strip()
+                except (subprocess.TimeoutExpired, Exception):
+                    pass
+
+            # Also check in ~/Library/Fonts
+            fonts_dir = os.path.expanduser("~/Library/Fonts")
+            if os.path.exists(fonts_dir):
+                for filename in os.listdir(fonts_dir):
+                    if "nerd" in filename.lower() or "meslo" in filename.lower():
+                        return AppStatus.INSTALLED, "MesloLG Nerd Font"
+
+        else:
+            # Linux: Check in ~/.local/share/fonts
+            fonts_dir = os.path.expanduser("~/.local/share/fonts")
+            if os.path.exists(fonts_dir):
+                for filename in os.listdir(fonts_dir):
+                    if "nerd" in filename.lower() or "meslo" in filename.lower():
+                        return AppStatus.INSTALLED, "MesloLG Nerd Font"
+
+        return AppStatus.NOT_INSTALLED, None
 
     def display_available_apps(self) -> list[tuple[AppInfo, AppStatus, Optional[str]]]:
         """Display all available applications with their status."""
@@ -333,6 +383,10 @@ class BootstrapApp:
             elif app.id == "alias":
                 from alias_installer.app import AliasInstallerApp
                 installer = AliasInstallerApp(dry_run=self.dry_run, no_interaction=self.no_interaction)
+                return installer.run() == 0
+            elif app.id == "nerd-font":
+                from font_installer.app import FontInstallerApp
+                installer = FontInstallerApp(dry_run=self.dry_run, no_interaction=self.no_interaction)
                 return installer.run() == 0
             else:
                 self.print_error(f"Installateur inconnu pour {app.name}")
