@@ -8,6 +8,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/keyxmare/DevBootstrap/internal/adapter/primary/cli"
+	"github.com/keyxmare/DevBootstrap/internal/adapter/primary/tui"
 	"github.com/keyxmare/DevBootstrap/internal/config"
 )
 
@@ -45,9 +46,14 @@ Applications disponibles:
 			os.Exit(1)
 		}
 
-		// Create and run CLI application
-		app := cli.NewApp(container)
-		os.Exit(app.Run())
+		// Use TUI for interactive mode, CLI for non-interactive
+		if noInteraction {
+			app := cli.NewApp(container)
+			os.Exit(app.Run())
+		} else {
+			app := tui.NewApp(container)
+			os.Exit(app.Run())
+		}
 	},
 }
 
