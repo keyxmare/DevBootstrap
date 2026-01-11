@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/fatih/color"
 	"github.com/keyxmare/DevBootstrap/internal/application/usecase"
 	"github.com/keyxmare/DevBootstrap/internal/config"
 	"github.com/keyxmare/DevBootstrap/internal/domain/entity"
@@ -12,6 +13,16 @@ import (
 	"github.com/keyxmare/DevBootstrap/internal/domain/valueobject"
 	"github.com/keyxmare/DevBootstrap/internal/port/primary"
 	"github.com/keyxmare/DevBootstrap/internal/port/secondary"
+)
+
+// Colors for the CLI
+var (
+	successColor = color.New(color.FgHiGreen)
+	dimColor     = color.New(color.Faint)
+	boldWhite    = color.New(color.FgHiWhite, color.Bold)
+	boldGreen    = color.New(color.FgHiGreen, color.Bold)
+	boldCyan     = color.New(color.FgHiCyan, color.Bold)
+	italicDim    = color.New(color.Faint, color.Italic)
 )
 
 const version = "3.0.0"
@@ -98,30 +109,109 @@ func (a *App) displayAvailableApps(apps []*entity.Application) {
 	fmt.Println()
 
 	for _, app := range apps {
-		statusIcon := "○"
-		statusText := "non installe"
-
 		if app.IsInstalled() {
-			statusIcon = "✓"
-			statusText = "installe"
-			if !app.Version().IsEmpty() {
-				statusText += fmt.Sprintf(" (%s)", app.Version())
-			}
-		}
+			// Installed app - green checkmark and bold name
+			successColor.Print("   ✓ ")
+			boldGreen.Print(app.Name())
 
-		fmt.Printf("  %s %s\n", statusIcon, app.Name())
-		fmt.Printf("      %s\n", app.Description())
-		fmt.Printf("      Status: %s\n", statusText)
+			// Version badge (only if version is meaningful)
+			if !app.Version().IsEmpty() {
+				ver := truncateVersion(app.Version().String())
+				if ver != "" && ver != "app only" {
+					dimColor.Print("  ")
+					italicDim.Printf("(%s)", ver)
+				}
+			}
+			fmt.Println()
+
+			// Description
+			dimColor.Printf("       %s\n", app.Description())
+		} else {
+			// Not installed - dim circle
+			dimColor.Print("   ○ ")
+			boldWhite.Print(app.Name())
+			fmt.Println()
+
+			// Description
+			dimColor.Printf("       %s\n", app.Description())
+		}
 		fmt.Println()
 	}
+}
+
+// truncateVersion truncates long version strings for display.
+func truncateVersion(version string) string {
+	// Common prefixes to remove
+	prefixes := []string{
+		"Docker version ",
+		"NVIM ",
+		"zsh ",
+		"(commande 'code' non configuree)",
+	}
+	for _, prefix := range prefixes {
+		if len(version) >= len(prefix) && version[:len(prefix)] == prefix {
+			version = version[len(prefix):]
+			break
+		}
+	}
+
+	// Handle special case for VSCode not configured
+	if version == "(commande 'code' non configuree)" {
+		return "app only"
+	}
+
+	// Remove build info after comma
+	if idx := indexOf(version, ","); idx > 0 {
+		version = version[:idx]
+	}
+
+	// Remove git hash info (like -g94144d4678)
+	if idx := indexOf(version, "+g"); idx > 0 {
+		version = version[:idx]
+	}
+
+	// Remove -dev suffix
+	if idx := indexOf(version, "-dev"); idx > 0 {
+		version = version[:idx]
+	}
+
+	// Remove architecture info in parentheses for zsh
+	if idx := indexOf(version, " ("); idx > 0 {
+		version = version[:idx]
+	}
+
+	// Final truncate if still too long
+	if len(version) > 20 {
+		return version[:17] + "..."
+	}
+	return version
+}
+
+// indexOf returns the index of substr in s, or -1 if not found.
+func indexOf(s, substr string) int {
+	for i := 0; i <= len(s)-len(substr); i++ {
+		if s[i:i+len(substr)] == substr {
+			return i
+		}
+	}
+	return -1
 }
 
 // askMode asks the user to select install or uninstall mode.
 func (a *App) askMode() bool {
 	a.reporter.Section("Mode d'operation")
 	fmt.Println()
-	fmt.Printf("  [1] Installer - Installer de nouvelles applications\n")
-	fmt.Printf("  [2] Desinstaller - Supprimer des applications installees\n")
+
+	// Option 1 - Install
+	boldCyan.Print("   [1] ")
+	boldWhite.Print(" Installer")
+	dimColor.Println("  →  Ajouter de nouvelles applications")
+
+	// Option 2 - Uninstall
+	boldCyan.Print("   [2] ")
+	boldWhite.Print(" Desinstaller")
+	dimColor.Println("  →  Supprimer des applications")
+
 	fmt.Println()
 
 	choice := a.prompter.Select("Votre choix", []string{"Installer", "Desinstaller"}, 0)
@@ -304,9 +394,13 @@ func (a *App) askMultiSelectUninstall(installed []*entity.Application) []*entity
 func (a *App) showInstallSummary(apps []*entity.Application) bool {
 	a.reporter.Section("Resume de l'installation")
 	fmt.Println()
-	fmt.Println("Applications a installer:")
+
+	boldWhite.Println("   Applications a installer:")
+	fmt.Println()
 	for _, app := range apps {
-		fmt.Printf("  • %s - %s\n", app.Name(), app.Description())
+		boldCyan.Print("    → ")
+		boldWhite.Print(app.Name())
+		dimColor.Printf("  %s\n", app.Description())
 	}
 	fmt.Println()
 
@@ -317,9 +411,12 @@ func (a *App) showInstallSummary(apps []*entity.Application) bool {
 func (a *App) showUninstallSummary(apps []*entity.Application) bool {
 	a.reporter.Section("Resume de la desinstallation")
 	fmt.Println()
-	fmt.Println("Applications a desinstaller:")
+
+	boldWhite.Println("   Applications a desinstaller:")
+	fmt.Println()
 	for _, app := range apps {
-		fmt.Printf("  • %s\n", app.Name())
+		color.New(color.FgHiRed).Print("    ✗ ")
+		boldWhite.Println(app.Name())
 	}
 	fmt.Println()
 	a.reporter.Warning("Cette action supprimera les applications et leurs configurations!")
