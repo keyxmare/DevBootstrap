@@ -58,6 +58,7 @@ type SystemInfo struct {
 	OSVersion string
 	Arch      Architecture
 	HomeDir   string
+	Username  string
 	IsRoot    bool
 	HasSudo   bool
 }

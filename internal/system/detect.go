@@ -12,16 +12,32 @@ import (
 // Detect detects and returns information about the current system.
 func Detect() *SystemInfo {
 	info := &SystemInfo{
-		OS:        detectOS(),
-		Arch:      detectArch(),
-		HomeDir:   detectHomeDir(),
-		IsRoot:    os.Geteuid() == 0,
-		HasSudo:   checkSudoAvailable(),
+		OS:       detectOS(),
+		Arch:     detectArch(),
+		HomeDir:  detectHomeDir(),
+		Username: detectUsername(),
+		IsRoot:   os.Geteuid() == 0,
+		HasSudo:  checkSudoAvailable(),
 	}
 
 	info.OSName, info.OSVersion = detectOSDetails(info.OS)
 
 	return info
+}
+
+// detectUsername returns the current user's username.
+func detectUsername() string {
+	// Try USER environment variable first
+	if username := os.Getenv("USER"); username != "" {
+		return username
+	}
+
+	// Fall back to user.Current()
+	if u, err := user.Current(); err == nil {
+		return u.Username
+	}
+
+	return ""
 }
 
 // detectOS determines the operating system type.
