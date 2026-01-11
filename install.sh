@@ -4,9 +4,6 @@
 # Usage: curl -fsSL <url>/install.sh | bash
 #    or: ./install.sh
 #
-# Ce script affiche un menu avec toutes les applications disponibles
-# et permet de sélectionner ce que vous souhaitez installer.
-#
 
 set -e
 
@@ -23,28 +20,30 @@ RESET='\033[0m'
 REPO_URL="https://github.com/keyxmare/DevBootstrap"
 INSTALL_DIR="${HOME}/.devbootstrap"
 
+# Global variable for Python command
+PYTHON_CMD=""
+
 print_banner() {
-    echo "" >&2
-    echo -e "${CYAN}${BOLD}╔════════════════════════════════════════════════════════════════╗${RESET}" >&2
-    echo -e "${CYAN}${BOLD}║${RESET}              ${BOLD}DevBootstrap${RESET} - Installation automatique              ${CYAN}${BOLD}║${RESET}" >&2
-    echo -e "${CYAN}${BOLD}╚════════════════════════════════════════════════════════════════╝${RESET}" >&2
-    echo "" >&2
+    echo -e "${CYAN}${BOLD}╔════════════════════════════════════════════════════════════════╗${RESET}"
+    echo -e "${CYAN}${BOLD}║${RESET}              ${BOLD}DevBootstrap${RESET} - Installation automatique              ${CYAN}${BOLD}║${RESET}"
+    echo -e "${CYAN}${BOLD}╚════════════════════════════════════════════════════════════════╝${RESET}"
+    echo ""
 }
 
 print_step() {
-    echo -e "${BLUE}▶${RESET} $1" >&2
+    echo -e "${BLUE}▶${RESET} $1"
 }
 
 print_success() {
-    echo -e "${GREEN}✓${RESET} $1" >&2
+    echo -e "${GREEN}✓${RESET} $1"
 }
 
 print_error() {
-    echo -e "${RED}✗${RESET} $1" >&2
+    echo -e "${RED}✗${RESET} $1"
 }
 
 print_warning() {
-    echo -e "${YELLOW}⚠${RESET} $1" >&2
+    echo -e "${YELLOW}⚠${RESET} $1"
 }
 
 detect_os() {
@@ -74,19 +73,19 @@ detect_os() {
 }
 
 check_python() {
-    # Check for Python 3.9+
+    # Check for Python 3.9+ and set PYTHON_CMD global variable
     if command -v python3 &> /dev/null; then
-        PYTHON_VERSION=$(python3 -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')
-        PYTHON_MAJOR=$(echo "$PYTHON_VERSION" | cut -d. -f1)
-        PYTHON_MINOR=$(echo "$PYTHON_VERSION" | cut -d. -f2)
+        local version
+        version=$(python3 -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')
+        local major minor
+        major=$(echo "$version" | cut -d. -f1)
+        minor=$(echo "$version" | cut -d. -f2)
 
-        if [ "$PYTHON_MAJOR" -ge 3 ] && [ "$PYTHON_MINOR" -ge 9 ]; then
-            echo "python3"
+        if [ "$major" -ge 3 ] && [ "$minor" -ge 9 ]; then
+            PYTHON_CMD="python3"
             return 0
         fi
     fi
-
-    echo ""
     return 1
 }
 
@@ -114,72 +113,73 @@ install_python_ubuntu() {
 }
 
 ensure_python() {
-    PYTHON_CMD=$(check_python)
-
-    if [ -z "$PYTHON_CMD" ]; then
-        print_warning "Python 3.9+ non trouvé"
-
-        OS_TYPE=$(detect_os)
-        case "$OS_TYPE" in
-            macos)
-                install_python_macos
-                ;;
-            ubuntu)
-                install_python_ubuntu
-                ;;
-            *)
-                print_error "Veuillez installer Python 3.9+ manuellement"
-                exit 1
-                ;;
-        esac
-
-        PYTHON_CMD=$(check_python)
-        if [ -z "$PYTHON_CMD" ]; then
-            print_error "Impossible d'installer Python"
-            exit 1
-        fi
+    if check_python; then
+        print_success "Python trouvé: $($PYTHON_CMD --version 2>&1)"
+        return 0
     fi
 
-    print_success "Python trouvé: $($PYTHON_CMD --version)"
-    echo "$PYTHON_CMD"
+    print_warning "Python 3.9+ non trouvé"
+
+    local os_type
+    os_type=$(detect_os)
+    case "$os_type" in
+        macos)
+            install_python_macos
+            ;;
+        ubuntu)
+            install_python_ubuntu
+            ;;
+        *)
+            print_error "Veuillez installer Python 3.9+ manuellement"
+            exit 1
+            ;;
+    esac
+
+    if ! check_python; then
+        print_error "Impossible d'installer Python"
+        exit 1
+    fi
+
+    print_success "Python installé: $($PYTHON_CMD --version 2>&1)"
 }
 
 download_installer() {
-    print_step "Téléchargement de DevBootstrap..."
-
-    # Create install directory
-    mkdir -p "$INSTALL_DIR"
-
-    # Check if git is available
+    # Sync silently - don't show git output
     if command -v git &> /dev/null; then
         if [ -d "$INSTALL_DIR/.git" ]; then
-            print_step "Mise à jour de DevBootstrap..."
-            cd "$INSTALL_DIR"
-            git pull --quiet
+            # Update existing repo silently
+            (cd "$INSTALL_DIR" && git fetch origin main --quiet 2>/dev/null && git reset --hard origin/main --quiet 2>/dev/null) || true
         else
-            rm -rf "$INSTALL_DIR"
-            git clone --depth=1 "$REPO_URL" "$INSTALL_DIR"
+            # Clone silently
+            rm -rf "$INSTALL_DIR" 2>/dev/null || true
+            git clone --depth=1 --quiet "$REPO_URL" "$INSTALL_DIR" 2>/dev/null || true
         fi
-    else
-        # Download as zip if git not available
-        TEMP_ZIP="/tmp/devbootstrap.zip"
-        curl -fsSL "${REPO_URL}/archive/refs/heads/main.zip" -o "$TEMP_ZIP"
-
-        rm -rf "$INSTALL_DIR"
-        unzip -q "$TEMP_ZIP" -d /tmp
-        mv /tmp/DevBootstrap-main "$INSTALL_DIR"
-        rm "$TEMP_ZIP"
     fi
 
-    print_success "DevBootstrap téléchargé"
+    # Check if we have a valid installation, if not try again with output
+    if [ ! -d "$INSTALL_DIR" ] || [ ! -f "$INSTALL_DIR/bootstrap/__main__.py" ]; then
+        print_step "Téléchargement de DevBootstrap..."
+
+        if command -v git &> /dev/null; then
+            rm -rf "$INSTALL_DIR" 2>/dev/null || true
+            git clone --depth=1 --quiet "$REPO_URL" "$INSTALL_DIR"
+        else
+            # Download as zip if git not available
+            local temp_zip="/tmp/devbootstrap.zip"
+            curl -fsSL "${REPO_URL}/archive/refs/heads/main.zip" -o "$temp_zip"
+            rm -rf "$INSTALL_DIR"
+            unzip -q "$temp_zip" -d /tmp
+            mv /tmp/DevBootstrap-main "$INSTALL_DIR"
+            rm "$temp_zip"
+        fi
+
+        print_success "DevBootstrap téléchargé"
+    fi
 }
 
 run_installer() {
-    PYTHON_CMD="$1"
-    shift  # Remove PYTHON_CMD from arguments
-
     print_step "Lancement du menu d'installation..."
-    echo "" >&2
+    echo ""
 
     cd "$INSTALL_DIR"
 
@@ -188,26 +188,28 @@ run_installer() {
 }
 
 main() {
+    echo ""
     print_banner
 
     # Detect OS
-    OS_TYPE=$(detect_os)
-    print_step "Système détecté: $OS_TYPE"
+    local os_type
+    os_type=$(detect_os)
+    print_step "Système détecté: $os_type"
 
-    if [ "$OS_TYPE" = "unsupported" ]; then
+    if [ "$os_type" = "unsupported" ]; then
         print_error "Système non supporté"
         print_warning "Systèmes supportés: macOS, Ubuntu, Debian"
         exit 1
     fi
 
-    # Ensure Python is available
-    PYTHON_CMD=$(ensure_python)
+    # Ensure Python is available (sets PYTHON_CMD global)
+    ensure_python
 
-    # Download/update installer
+    # Download/update installer (silent sync)
     download_installer
 
     # Run the installer
-    run_installer "$PYTHON_CMD" "$@"
+    run_installer "$@"
 }
 
 # Check if script is being piped
