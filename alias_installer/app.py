@@ -53,9 +53,10 @@ class AliasInstallerApp:
     # The curl command that runs the installer
     CURL_COMMAND = 'bash -c "$(curl -fsSL https://raw.githubusercontent.com/{repo}/main/install.sh)"'
 
-    def __init__(self, dry_run: bool = False):
+    def __init__(self, dry_run: bool = False, no_interaction: bool = False):
         """Initialize the application."""
         self.dry_run = dry_run
+        self.no_interaction = no_interaction
         self.use_colors = sys.stdout.isatty()
         if not self.use_colors:
             Colors.disable()
@@ -109,6 +110,11 @@ class AliasInstallerApp:
 
     def ask_yes_no(self, question: str, default: bool = True) -> bool:
         """Ask a yes/no question."""
+        # In no-interaction mode, always return default
+        if self.no_interaction:
+            self.print_info(f"{question} -> {'oui' if default else 'non'} (auto)")
+            return default
+
         default_str = "O/n" if default else "o/N"
         prompt = f"{Colors.YELLOW}?{Colors.RESET} {question} [{default_str}]: "
 

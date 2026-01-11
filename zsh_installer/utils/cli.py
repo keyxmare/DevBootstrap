@@ -37,9 +37,10 @@ class Colors:
 class CLI:
     """Interactive CLI utilities."""
 
-    def __init__(self, use_colors: bool = True):
+    def __init__(self, use_colors: bool = True, no_interaction: bool = False):
         """Initialize CLI with optional color support."""
         self.use_colors = use_colors and sys.stdout.isatty()
+        self.no_interaction = no_interaction
         if not self.use_colors:
             Colors.disable()
 
@@ -98,6 +99,11 @@ class CLI:
         default: bool = True
     ) -> bool:
         """Ask a yes/no question and return the answer."""
+        # In no-interaction mode, always return default
+        if self.no_interaction:
+            self.print_info(f"{question} -> {'oui' if default else 'non'} (auto)")
+            return default
+
         default_str = "O/n" if default else "o/N"
         prompt = f"{Colors.YELLOW}?{Colors.RESET} {question} [{default_str}]: "
 
@@ -128,6 +134,11 @@ class CLI:
         validate: Optional[Callable[[str], bool]] = None
     ) -> str:
         """Ask for a path with a default value."""
+        # In no-interaction mode, always return default
+        if self.no_interaction:
+            self.print_info(f"{question} -> {default} (auto)")
+            return default
+
         prompt = f"{Colors.YELLOW}?{Colors.RESET} {question}\n  [{Colors.DIM}{default}{Colors.RESET}]: "
 
         while True:
@@ -155,6 +166,11 @@ class CLI:
         default: int = 0
     ) -> int:
         """Ask user to choose from a list of options."""
+        # In no-interaction mode, always return default
+        if self.no_interaction:
+            self.print_info(f"{question} -> {choices[default]} (auto)")
+            return default
+
         self.print(f"{Colors.YELLOW}?{Colors.RESET} {question}")
 
         for i, choice in enumerate(choices):

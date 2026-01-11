@@ -151,6 +151,11 @@ class BootstrapApp:
 
     def ask_yes_no(self, question: str, default: bool = True) -> bool:
         """Ask a yes/no question and return the answer."""
+        # In no-interaction mode, always return default
+        if self.no_interaction:
+            self.print_info(f"{question} → {'oui' if default else 'non'} (auto)")
+            return default
+
         default_str = "O/n" if default else "o/N"
         prompt = f"{Colors.YELLOW}?{Colors.RESET} {question} [{default_str}]: "
 
@@ -180,6 +185,15 @@ class BootstrapApp:
         apps_status: list[tuple[AppInfo, AppStatus, Optional[str]]]
     ) -> list[AppInfo]:
         """Ask user to select multiple applications to install."""
+        # In no-interaction mode, install all apps that are not installed
+        if self.no_interaction:
+            not_installed = [app for app, status, _ in apps_status if status == AppStatus.NOT_INSTALLED]
+            self.print_section("Mode non-interactif")
+            self.print_info(f"Installation automatique de {len(not_installed)} application(s) non installée(s)")
+            for app in not_installed:
+                self.print(f"  {Colors.CYAN}•{Colors.RESET} {app.name}")
+            return not_installed
+
         self.print_section("Sélection des installations")
         self.print()
         self.print(f"{Colors.YELLOW}?{Colors.RESET} {question}")
@@ -268,23 +282,23 @@ class BootstrapApp:
             # Import and run the installer module
             if app.id == "neovim":
                 from nvim_installer.app import NeovimInstallerApp
-                installer = NeovimInstallerApp(dry_run=self.dry_run)
+                installer = NeovimInstallerApp(dry_run=self.dry_run, no_interaction=self.no_interaction)
                 return installer.run() == 0
             elif app.id == "docker":
                 from docker_installer.app import DockerInstallerApp
-                installer = DockerInstallerApp(dry_run=self.dry_run)
+                installer = DockerInstallerApp(dry_run=self.dry_run, no_interaction=self.no_interaction)
                 return installer.run() == 0
             elif app.id == "vscode":
                 from vscode_installer.app import VSCodeInstallerApp
-                installer = VSCodeInstallerApp(dry_run=self.dry_run)
+                installer = VSCodeInstallerApp(dry_run=self.dry_run, no_interaction=self.no_interaction)
                 return installer.run() == 0
             elif app.id == "zsh":
                 from zsh_installer.app import ZshInstallerApp
-                installer = ZshInstallerApp(dry_run=self.dry_run)
+                installer = ZshInstallerApp(dry_run=self.dry_run, no_interaction=self.no_interaction)
                 return installer.run() == 0
             elif app.id == "alias":
                 from alias_installer.app import AliasInstallerApp
-                installer = AliasInstallerApp(dry_run=self.dry_run)
+                installer = AliasInstallerApp(dry_run=self.dry_run, no_interaction=self.no_interaction)
                 return installer.run() == 0
             else:
                 self.print_error(f"Installateur inconnu pour {app.name}")
@@ -379,6 +393,11 @@ def main():
         help="Simuler l'installation sans effectuer de changements"
     )
     parser.add_argument(
+        "-n", "--no-interaction",
+        action="store_true",
+        help="Mode non-interactif (installe tout sans confirmation)"
+    )
+    parser.add_argument(
         "--version",
         action="version",
         version=f"DevBootstrap {BootstrapApp.VERSION}"
@@ -386,7 +405,7 @@ def main():
 
     args = parser.parse_args()
 
-    app = BootstrapApp(dry_run=args.dry_run)
+    app = BootstrapApp(dry_run=args.dry_run, no_interaction=args.no_interaction)
     sys.exit(app.run())
 
 

@@ -28,13 +28,14 @@ class VSCodeInstallerApp:
 
     VERSION = "1.0.0"
 
-    def __init__(self, dry_run: bool = False):
+    def __init__(self, dry_run: bool = False, no_interaction: bool = False):
         """Initialize the application."""
-        self.cli = CLI()
+        self.cli = CLI(no_interaction=no_interaction)
         self.system_info = SystemInfo.detect()
         self.runner = CommandRunner(self.cli, dry_run=dry_run)
         self.installer = self._get_installer()
         self.dry_run = dry_run
+        self.no_interaction = no_interaction
 
     def _get_installer(self):
         """Get the appropriate installer for the current platform."""
