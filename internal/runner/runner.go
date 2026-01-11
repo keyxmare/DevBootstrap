@@ -39,9 +39,7 @@ func (r *Runner) Run(args []string, opts ...Option) *Result {
 
 	// Add sudo if needed
 	if options.sudo && os.Geteuid() != 0 {
-		// Preserve PATH for Homebrew access
-		currentPath := os.Getenv("PATH")
-		args = append([]string{"sudo", fmt.Sprintf("PATH=%s", currentPath), "env"}, args...)
+		args = append([]string{"sudo"}, args...)
 	}
 
 	cmdStr := strings.Join(args, " ")
@@ -106,8 +104,7 @@ func (r *Runner) RunInteractive(args []string, opts ...Option) bool {
 
 	// Add sudo if needed
 	if options.sudo && os.Geteuid() != 0 {
-		currentPath := os.Getenv("PATH")
-		args = append([]string{"sudo", fmt.Sprintf("PATH=%s", currentPath), "env"}, args...)
+		args = append([]string{"sudo"}, args...)
 	}
 
 	if options.description != "" {
