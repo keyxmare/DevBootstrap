@@ -179,6 +179,10 @@ class BaseInstaller(ABC):
         self.cli.print_info(f"Sauvegarde de la configuration existante vers {backup_dir}")
         return self.runner.copy_directory(config_dir, backup_dir)
 
+    def check_existing_installation(self) -> bool:
+        """Check if Neovim is already installed."""
+        return self.runner.check_command_exists("nvim")
+
     def verify_installation(self) -> Optional[str]:
         """Verify Neovim installation and return version."""
         version = self.runner.get_command_version("nvim")
@@ -191,6 +195,20 @@ class BaseInstaller(ABC):
         self.options = options
         errors = []
         warnings = []
+
+        # Step 0: Check existing installation
+        self.cli.print_section("Vérification de l'installation existante")
+        if self.check_existing_installation():
+            version = self.verify_installation()
+            self.cli.print_info(f"Neovim est déjà installé: {version}")
+
+            if not self.cli.ask_yes_no("Voulez-vous réinstaller/mettre à jour Neovim?", default=False):
+                return InstallResult(
+                    success=True,
+                    message="Neovim est déjà installé",
+                    neovim_path=self.runner.get_command_path("nvim"),
+                    neovim_version=version
+                )
 
         # Step 1: Check/install package manager
         self.cli.print_section("Vérification du gestionnaire de paquets")
