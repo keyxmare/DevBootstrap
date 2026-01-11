@@ -5,10 +5,14 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/keyxmare/DevBootstrap/internal/application/usecase"
 	"github.com/keyxmare/DevBootstrap/internal/domain/entity"
+	"github.com/keyxmare/DevBootstrap/internal/domain/valueobject"
+	"github.com/keyxmare/DevBootstrap/internal/port/primary"
 )
 
 // State represents the current UI state.
@@ -34,7 +38,15 @@ const (
 	iconArrow        = "→"
 	iconCheck        = "✓"
 	iconCross        = "✕"
+	iconSpinner      = "◐"
 )
+
+// Messages for async operations
+type installDoneMsg struct {
+	successCount int
+	failureCount int
+}
+type tickMsg time.Time
 
 // Model is the main TUI model.
 type Model struct {
@@ -44,13 +56,13 @@ type Model struct {
 	styles Styles
 
 	// State
-	state       State
-	err         error
+	state State
+	err   error
 
 	// Data
-	platform    *entity.Platform
-	apps        []*entity.Application
-	version     string
+	platform *entity.Platform
+	apps     []*entity.Application
+	version  string
 
 	// Mode selection
 	uninstallMode bool
@@ -60,27 +72,45 @@ type Model struct {
 	appIndex     int
 	selectedApps map[int]bool
 
-	// Installation
-	installing    bool
-	installIndex  int
-	results       map[string]bool
+	// Installation progress
+	installing   bool
+	spinnerFrame int
+	successCount int
+	failureCount int
+
+	// Use cases (injected)
+	installUseCase   *usecase.InstallApplicationUseCase
+	uninstallUseCase *usecase.UninstallApplicationUseCase
 
 	// Context for operations
 	ctx context.Context
 }
 
+// ContainerInterface defines what we need from the container.
+type ContainerInterface interface {
+	GetDryRun() bool
+}
+
 // NewModel creates a new TUI model.
-func NewModel(platform *entity.Platform, apps []*entity.Application, version string) Model {
+func NewModel(
+	platform *entity.Platform,
+	apps []*entity.Application,
+	version string,
+	installUC *usecase.InstallApplicationUseCase,
+	uninstallUC *usecase.UninstallApplicationUseCase,
+	dryRun bool,
+) Model {
 	return Model{
-		platform:     platform,
-		apps:         apps,
-		version:      version,
-		state:        StateMain,
-		modeIndex:    0,
-		appIndex:     0,
-		selectedApps: make(map[int]bool),
-		results:      make(map[string]bool),
-		ctx:          context.Background(),
+		platform:         platform,
+		apps:             apps,
+		version:          version,
+		state:            StateMain,
+		modeIndex:        0,
+		appIndex:         0,
+		selectedApps:     make(map[int]bool),
+		installUseCase:   installUC,
+		uninstallUseCase: uninstallUC,
+		ctx:              context.Background(),
 	}
 }
 
@@ -98,7 +128,26 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.styles = NewStyles(msg.Width)
 		return m, nil
 
+	case tickMsg:
+		if m.state == StateInstalling {
+			m.spinnerFrame++
+			return m, tickCmd()
+		}
+		return m, nil
+
+	case installDoneMsg:
+		m.installing = false
+		m.successCount = msg.successCount
+		m.failureCount = msg.failureCount
+		m.state = StateResult
+		return m, nil
+
 	case tea.KeyMsg:
+		// Don't handle keys during installation
+		if m.state == StateInstalling {
+			return m, nil
+		}
+
 		switch msg.String() {
 		case "q", "ctrl+c":
 			m.state = StateQuit
@@ -124,6 +173,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+func tickCmd() tea.Cmd {
+	return tea.Tick(100*time.Millisecond, func(t time.Time) tea.Msg {
+		return tickMsg(t)
+	})
+}
+
 func (m Model) handleEnter() (tea.Model, tea.Cmd) {
 	switch m.state {
 	case StateMain:
@@ -137,8 +192,12 @@ func (m Model) handleEnter() (tea.Model, tea.Cmd) {
 			m.state = StateConfirm
 		}
 	case StateConfirm:
-		// Would trigger installation here
-		m.state = StateResult
+		// Start installation
+		m.state = StateInstalling
+		m.installing = true
+		m.successCount = 0
+		m.failureCount = 0
+		return m, tea.Batch(tickCmd(), m.startInstallation())
 	case StateResult:
 		return m, tea.Quit
 	}
@@ -217,6 +276,17 @@ func (m Model) getSelectableApps() []*entity.Application {
 	return m.apps
 }
 
+func (m Model) getSelectedApps() []*entity.Application {
+	apps := m.getSelectableApps()
+	var selected []*entity.Application
+	for i, app := range apps {
+		if m.selectedApps[i] {
+			selected = append(selected, app)
+		}
+	}
+	return selected
+}
+
 func (m Model) hasSelection() bool {
 	for _, selected := range m.selectedApps {
 		if selected {
@@ -236,6 +306,66 @@ func (m Model) countInstalled() int {
 	return count
 }
 
+func (m Model) startInstallation() tea.Cmd {
+	// Capture values needed for the async operation
+	selectedApps := m.getSelectedApps()
+	uninstallMode := m.uninstallMode
+	installUC := m.installUseCase
+	uninstallUC := m.uninstallUseCase
+	ctx := m.ctx
+
+	return func() tea.Msg {
+		if len(selectedApps) == 0 {
+			return installDoneMsg{0, 0}
+		}
+
+		successCount := 0
+		failureCount := 0
+
+		for _, app := range selectedApps {
+			appIDs := []valueobject.AppID{app.ID()}
+
+			var success bool
+			if uninstallMode {
+				opts := primary.UninstallOptions{
+					DryRun:        false,
+					NoInteraction: true,
+					RemoveConfig:  true,
+					RemoveCache:   true,
+					RemoveData:    true,
+				}
+				results, err := uninstallUC.ExecuteMultiple(ctx, appIDs, opts)
+				if err == nil {
+					// Check individual result
+					if r, ok := results[app.ID().String()]; ok && r.Success() {
+						success = true
+					}
+				}
+			} else {
+				opts := primary.InstallOptions{
+					DryRun:        false,
+					NoInteraction: true,
+				}
+				results, err := installUC.ExecuteMultiple(ctx, appIDs, opts)
+				if err == nil {
+					// Check individual result
+					if r, ok := results[app.ID().String()]; ok && r.Success() {
+						success = true
+					}
+				}
+			}
+
+			if success {
+				successCount++
+			} else {
+				failureCount++
+			}
+		}
+
+		return installDoneMsg{successCount, failureCount}
+	}
+}
+
 // View implements tea.Model.
 func (m Model) View() string {
 	if m.width == 0 {
@@ -253,6 +383,8 @@ func (m Model) View() string {
 		content = m.viewAppSelect()
 	case StateConfirm:
 		content = m.viewConfirm()
+	case StateInstalling:
+		content = m.viewInstalling()
 	case StateResult:
 		content = m.viewResult()
 	default:
@@ -272,20 +404,13 @@ func (m Model) View() string {
 func (m Model) viewMain() string {
 	var b strings.Builder
 
-	// Header
 	b.WriteString(m.renderHeader())
 	b.WriteString("\n\n")
-
-	// System info
 	b.WriteString(m.renderSystemInfo())
 	b.WriteString("\n\n")
-
-	// Applications list
 	b.WriteString(m.renderAppList())
 	b.WriteString("\n\n")
-
-	// Footer
-	b.WriteString(m.renderFooter("Appuyez sur Entrée pour continuer"))
+	b.WriteString(m.renderFooter("Entrée: continuer • q: quitter"))
 
 	return m.styles.Content.Render(b.String())
 }
@@ -296,13 +421,11 @@ func (m Model) viewModeSelect() string {
 	b.WriteString(m.renderHeader())
 	b.WriteString("\n\n")
 
-	// Section title
 	b.WriteString(m.styles.SectionTitle.Render("Action"))
 	b.WriteString("\n")
 	b.WriteString(m.styles.SectionLine.Render(strings.Repeat("─", 40)))
 	b.WriteString("\n\n")
 
-	// Options
 	options := []struct {
 		title string
 		desc  string
@@ -338,17 +461,12 @@ func (m Model) viewAppSelect() string {
 	b.WriteString(m.renderHeader())
 	b.WriteString("\n\n")
 
-	// Section title
-	title := "Installation"
-	if m.uninstallMode {
-		title = "Désinstallation"
-	}
+	title := "Sélection"
 	b.WriteString(m.styles.SectionTitle.Render(title))
 	b.WriteString("\n")
 	b.WriteString(m.styles.SectionLine.Render(strings.Repeat("─", 40)))
 	b.WriteString("\n\n")
 
-	// App list
 	apps := m.getSelectableApps()
 	for i, app := range apps {
 		cursor := "  "
@@ -375,7 +493,6 @@ func (m Model) viewAppSelect() string {
 		b.WriteString("\n")
 	}
 
-	// Selection count
 	count := 0
 	for _, selected := range m.selectedApps {
 		if selected {
@@ -386,7 +503,7 @@ func (m Model) viewAppSelect() string {
 	b.WriteString(m.styles.Muted.Render(fmt.Sprintf("%d sélectionnée(s)", count)))
 	b.WriteString("\n\n")
 
-	b.WriteString(m.renderFooter("↑/↓: naviguer • Espace: sélectionner • Entrée: confirmer • Esc: retour"))
+	b.WriteString(m.renderFooter("↑/↓: naviguer • Espace: sélectionner • Entrée: continuer • Esc: retour"))
 
 	return m.styles.Content.Render(b.String())
 }
@@ -397,17 +514,15 @@ func (m Model) viewConfirm() string {
 	b.WriteString(m.renderHeader())
 	b.WriteString("\n\n")
 
-	// Section title
-	title := "Confirmer l'installation"
+	title := "Confirmer"
 	if m.uninstallMode {
-		title = "Confirmer la désinstallation"
+		title = "Confirmer la suppression"
 	}
 	b.WriteString(m.styles.SectionTitle.Render(title))
 	b.WriteString("\n")
 	b.WriteString(m.styles.SectionLine.Render(strings.Repeat("─", 40)))
 	b.WriteString("\n\n")
 
-	// Selected apps
 	apps := m.getSelectableApps()
 	for i, app := range apps {
 		if m.selectedApps[i] {
@@ -425,6 +540,41 @@ func (m Model) viewConfirm() string {
 	return m.styles.Content.Render(b.String())
 }
 
+func (m Model) viewInstalling() string {
+	var b strings.Builder
+
+	b.WriteString(m.renderHeader())
+	b.WriteString("\n\n")
+
+	action := "Installation"
+	if m.uninstallMode {
+		action = "Désinstallation"
+	}
+	b.WriteString(m.styles.SectionTitle.Render(action + " en cours..."))
+	b.WriteString("\n")
+	b.WriteString(m.styles.SectionLine.Render(strings.Repeat("─", 40)))
+	b.WriteString("\n\n")
+
+	// Spinner animation
+	spinnerFrames := []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
+	spinner := spinnerFrames[m.spinnerFrame%len(spinnerFrames)]
+
+	b.WriteString(fmt.Sprintf("  %s  ", m.styles.Info.Render(spinner)))
+	b.WriteString(m.styles.Muted.Render("Veuillez patienter..."))
+	b.WriteString("\n\n")
+
+	// Show selected apps
+	apps := m.getSelectedApps()
+	for _, app := range apps {
+		b.WriteString(fmt.Sprintf("  %s  %s\n", m.styles.Muted.Render("◌"), app.Name()))
+	}
+
+	b.WriteString("\n\n")
+	b.WriteString(m.renderFooter("Opération en cours..."))
+
+	return m.styles.Content.Render(b.String())
+}
+
 func (m Model) viewResult() string {
 	var b strings.Builder
 
@@ -436,9 +586,15 @@ func (m Model) viewResult() string {
 	b.WriteString(m.styles.SectionLine.Render(strings.Repeat("─", 40)))
 	b.WriteString("\n\n")
 
-	b.WriteString(m.styles.Success.Render("✓  Opération terminée avec succès"))
-	b.WriteString("\n\n")
+	// Summary
+	total := m.successCount + m.failureCount
+	if m.failureCount == 0 {
+		b.WriteString(m.styles.Success.Render(fmt.Sprintf("  %s  %d/%d opération(s) réussie(s)", iconCheck, m.successCount, total)))
+	} else {
+		b.WriteString(m.styles.Warning.Render(fmt.Sprintf("  !  %d succès, %d échec(s)", m.successCount, m.failureCount)))
+	}
 
+	b.WriteString("\n\n")
 	b.WriteString(m.renderFooter("Entrée: quitter"))
 
 	return m.styles.Content.Render(b.String())
@@ -447,22 +603,18 @@ func (m Model) viewResult() string {
 func (m Model) renderHeader() string {
 	var b strings.Builder
 
-	// Divider
 	divider := m.styles.Divider.Render(strings.Repeat("─", 60))
 	b.WriteString(divider)
 	b.WriteString("\n\n")
 
-	// Title
 	title := m.styles.Title.Render(fmt.Sprintf("DevBootstrap v%s", m.version))
 	b.WriteString(lipgloss.PlaceHorizontal(60, lipgloss.Center, title))
 	b.WriteString("\n")
 
-	// Subtitle
 	subtitle := m.styles.Subtitle.Render("Configuration de votre environnement de développement")
 	b.WriteString(lipgloss.PlaceHorizontal(60, lipgloss.Center, subtitle))
 	b.WriteString("\n\n")
 
-	// Divider
 	b.WriteString(divider)
 
 	return b.String()
@@ -525,7 +677,6 @@ func (m Model) renderAppList() string {
 		b.WriteString("\n\n")
 	}
 
-	// Counter
 	counter := m.styles.Counter.Render(fmt.Sprintf("%d/%d installées", m.countInstalled(), len(m.apps)))
 	b.WriteString(counter)
 
