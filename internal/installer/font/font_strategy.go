@@ -98,6 +98,10 @@ func (s *Strategy) Install(ctx context.Context, opts primary.InstallOptions) (*r
 	status, version, _ := s.CheckStatus(ctx)
 	if status.IsInstalled() {
 		s.Info("Une Nerd Font est deja installee: " + version)
+		// In non-interactive mode, skip additional installation
+		if opts.NoInteraction {
+			return result.NewSuccess("Nerd Font deja installee"), nil
+		}
 		if !s.Confirm("Voulez-vous installer d'autres polices?", false) {
 			return result.NewSuccess("Nerd Font deja installee"), nil
 		}

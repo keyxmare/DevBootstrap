@@ -48,6 +48,10 @@ func (s *OhMyZshStrategy) Install(ctx context.Context, opts primary.InstallOptio
 	status, _, _ := s.CheckStatus(ctx)
 	if status.IsInstalled() {
 		s.Info("Oh My Zsh est deja installe")
+		// In non-interactive mode, skip reinstallation
+		if opts.NoInteraction {
+			return result.NewSuccess("Oh My Zsh deja installe"), nil
+		}
 		if !s.Confirm("Voulez-vous reinstaller?", false) {
 			return result.NewSuccess("Oh My Zsh deja installe"), nil
 		}
