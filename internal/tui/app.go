@@ -3,6 +3,7 @@ package tui
 import (
 	"fmt"
 	"os"
+	"os/exec"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -74,7 +75,47 @@ func (a *App) Run() error {
 	return nil
 }
 
+// preCacheSudo asks for sudo password upfront
+func (a *App) preCacheSudo() {
+	// Skip if already root or in dry-run mode
+	if a.sysInfo.IsRoot || a.dryRun {
+		return
+	}
+
+	// Check if sudo is available
+	if _, err := exec.LookPath("sudo"); err != nil {
+		return
+	}
+
+	// Check if sudo credentials are already cached
+	checkCmd := exec.Command("sudo", "-n", "true")
+	if checkCmd.Run() == nil {
+		return // Already authenticated
+	}
+
+	// Ask for password
+	infoStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#06B6D4"))
+	fmt.Println()
+	fmt.Println(infoStyle.Render("🔐 Certaines installations nécessitent les droits administrateur."))
+	fmt.Println()
+
+	// Run sudo -v to cache credentials (will prompt for password)
+	sudoCmd := exec.Command("sudo", "-v")
+	sudoCmd.Stdin = os.Stdin
+	sudoCmd.Stdout = os.Stdout
+	sudoCmd.Stderr = os.Stderr
+
+	if err := sudoCmd.Run(); err != nil {
+		errorStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#EF4444"))
+		fmt.Println(errorStyle.Render("⚠ Impossible d'obtenir les droits sudo. Certaines installations peuvent échouer."))
+	}
+	fmt.Println()
+}
+
 func (a *App) runInstallations() error {
+	// Ask for sudo password now, right before installations
+	a.preCacheSudo()
+
 	// Styles for output
 	successStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#10B981")).Bold(true)
 	errorStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#EF4444")).Bold(true)
@@ -86,7 +127,6 @@ func (a *App) runInstallations() error {
 		action = "Désinstallation"
 	}
 
-	fmt.Println()
 	fmt.Println(headerStyle.Render(fmt.Sprintf("━━━ %s ━━━", action)))
 	fmt.Println()
 
