@@ -15,9 +15,10 @@ import (
 
 // Runner executes shell commands with logging and error handling.
 type Runner struct {
-	CLI     *cli.CLI
-	DryRun  bool
-	UseSudo bool
+	CLI         *cli.CLI
+	DryRun      bool
+	UseSudo     bool
+	sudoAskpass string // Path to SUDO_ASKPASS script
 }
 
 // New creates a new Runner instance.
@@ -26,6 +27,11 @@ func New(c *cli.CLI, dryRun bool) *Runner {
 		CLI:    c,
 		DryRun: dryRun,
 	}
+}
+
+// SetSudoAskpass sets the path to a SUDO_ASKPASS script for non-interactive sudo.
+func (r *Runner) SetSudoAskpass(path string) {
+	r.sudoAskpass = path
 }
 
 // Run executes a command and captures its output.
@@ -42,6 +48,9 @@ func (r *Runner) Run(args []string, opts ...Option) *Result {
 		if options.sudoNonInteractive {
 			// Use -n flag to fail if password is required (don't prompt)
 			args = append([]string{"sudo", "-n"}, args...)
+		} else if r.sudoAskpass != "" {
+			// Use SUDO_ASKPASS for non-interactive password entry
+			args = append([]string{"sudo", "-A"}, args...)
 		} else {
 			args = append([]string{"sudo"}, args...)
 		}
@@ -66,6 +75,9 @@ func (r *Runner) Run(args []string, opts ...Option) *Result {
 
 	// Set environment
 	cmd.Env = os.Environ()
+	if r.sudoAskpass != "" {
+		cmd.Env = append(cmd.Env, fmt.Sprintf("SUDO_ASKPASS=%s", r.sudoAskpass))
+	}
 	if len(options.env) > 0 {
 		for k, v := range options.env {
 			cmd.Env = append(cmd.Env, fmt.Sprintf("%s=%s", k, v))
@@ -78,8 +90,8 @@ func (r *Runner) Run(args []string, opts ...Option) *Result {
 	}
 
 	var stdout, stderr bytes.Buffer
-	// For sudo commands, connect to terminal to allow password prompt if needed
-	if options.sudo && !options.sudoNonInteractive {
+	// For sudo commands without askpass, connect to terminal to allow password prompt
+	if options.sudo && !options.sudoNonInteractive && r.sudoAskpass == "" {
 		cmd.Stdin = os.Stdin
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
@@ -129,7 +141,11 @@ func (r *Runner) RunInteractive(args []string, opts ...Option) bool {
 
 	// Add sudo if needed
 	if options.sudo && os.Geteuid() != 0 {
-		args = append([]string{"sudo"}, args...)
+		if r.sudoAskpass != "" {
+			args = append([]string{"sudo", "-A"}, args...)
+		} else {
+			args = append([]string{"sudo"}, args...)
+		}
 	}
 
 	if options.description != "" {
@@ -148,6 +164,9 @@ func (r *Runner) RunInteractive(args []string, opts ...Option) bool {
 
 	// Set environment
 	cmd.Env = os.Environ()
+	if r.sudoAskpass != "" {
+		cmd.Env = append(cmd.Env, fmt.Sprintf("SUDO_ASKPASS=%s", r.sudoAskpass))
+	}
 	if len(options.env) > 0 {
 		for k, v := range options.env {
 			cmd.Env = append(cmd.Env, fmt.Sprintf("%s=%s", k, v))

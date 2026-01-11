@@ -4,13 +4,15 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"time"
+	"strings"
+	"syscall"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/keyxmare/DevBootstrap/internal/installers"
 	"github.com/keyxmare/DevBootstrap/internal/runner"
 	"github.com/keyxmare/DevBootstrap/internal/system"
+	"golang.org/x/term"
 )
 
 // App is the main TUI application
@@ -76,10 +78,10 @@ func (a *App) Run() error {
 	return nil
 }
 
-// sudoKeepAliveStop is used to stop the sudo keep-alive goroutine
-var sudoKeepAliveStop chan struct{}
+// sudoAskpassScript stores the path to the temporary askpass script
+var sudoAskpassScript string
 
-// preCacheSudo asks for sudo password upfront and starts keep-alive
+// preCacheSudo asks for sudo password upfront and sets up SUDO_ASKPASS
 func (a *App) preCacheSudo() {
 	// Skip if already root or in dry-run mode
 	if a.sysInfo.IsRoot || a.dryRun {
@@ -91,67 +93,75 @@ func (a *App) preCacheSudo() {
 		return
 	}
 
-	// Check if sudo credentials are already cached
-	checkCmd := exec.Command("sudo", "-n", "true")
-	if checkCmd.Run() == nil {
-		// Already authenticated, start keep-alive
-		a.startSudoKeepAlive()
-		return
-	}
-
-	// Ask for password
+	// Always ask for password to set up SUDO_ASKPASS
+	// (the TTY-based sudo cache doesn't work reliably across subprocesses)
 	infoStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#06B6D4"))
 	fmt.Println()
 	fmt.Println(infoStyle.Render("🔐 Certaines installations nécessitent les droits administrateur."))
-	fmt.Println()
+	fmt.Print("Mot de passe: ")
 
-	// Run sudo -v to cache credentials (will prompt for password)
-	sudoCmd := exec.Command("sudo", "-v")
-	sudoCmd.Stdin = os.Stdin
-	sudoCmd.Stdout = os.Stdout
-	sudoCmd.Stderr = os.Stderr
+	// Read password without echo
+	passwordBytes, err := term.ReadPassword(int(syscall.Stdin))
+	fmt.Println() // New line after password input
 
-	if err := sudoCmd.Run(); err != nil {
+	if err != nil {
 		errorStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#EF4444"))
-		fmt.Println(errorStyle.Render("⚠ Impossible d'obtenir les droits sudo. Certaines installations peuvent échouer."))
-	} else {
-		// Start keep-alive to maintain sudo credentials during installations
-		a.startSudoKeepAlive()
+		fmt.Println(errorStyle.Render("⚠ Impossible de lire le mot de passe."))
+		fmt.Println()
+		return
 	}
+
+	password := strings.TrimSpace(string(passwordBytes))
+	if password == "" {
+		fmt.Println()
+		return
+	}
+
+	// Verify password is correct
+	verifyCmd := exec.Command("sudo", "-S", "-v")
+	verifyCmd.Stdin = strings.NewReader(password + "\n")
+	if err := verifyCmd.Run(); err != nil {
+		errorStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#EF4444"))
+		fmt.Println(errorStyle.Render("⚠ Mot de passe incorrect."))
+		fmt.Println()
+		return
+	}
+
+	// Create temporary askpass script
+	tmpFile, err := os.CreateTemp("", "askpass-*.sh")
+	if err != nil {
+		return
+	}
+
+	// Write script that echoes the password
+	// Using printf to avoid issues with special characters
+	script := fmt.Sprintf("#!/bin/sh\nprintf '%%s\\n' '%s'\n", escapeForShell(password))
+	tmpFile.WriteString(script)
+	tmpFile.Close()
+	os.Chmod(tmpFile.Name(), 0700)
+
+	sudoAskpassScript = tmpFile.Name()
+
+	// Set environment variable for the runner to use
+	a.runner.SetSudoAskpass(sudoAskpassScript)
+
 	fmt.Println()
 }
 
-// startSudoKeepAlive starts a goroutine that refreshes sudo every 10 seconds
-func (a *App) startSudoKeepAlive() {
-	sudoKeepAliveStop = make(chan struct{})
-	// Refresh immediately
-	cmd := exec.Command("sudo", "-v")
-	cmd.Stdin = os.Stdin
-	cmd.Run()
-
-	go func() {
-		ticker := time.NewTicker(10 * time.Second)
-		defer ticker.Stop()
-		for {
-			select {
-			case <-ticker.C:
-				// Refresh sudo timestamp - needs stdin for TTY
-				cmd := exec.Command("sudo", "-v")
-				cmd.Stdin = os.Stdin
-				cmd.Run()
-			case <-sudoKeepAliveStop:
-				return
-			}
-		}
-	}()
+// escapeForShell escapes a string for safe use in single quotes
+func escapeForShell(s string) string {
+	// In single quotes, we only need to escape single quotes
+	// We do this by ending the quote, adding escaped quote, starting new quote
+	return strings.ReplaceAll(s, "'", "'\"'\"'")
 }
 
-// stopSudoKeepAlive stops the sudo keep-alive goroutine
-func (a *App) stopSudoKeepAlive() {
-	if sudoKeepAliveStop != nil {
-		close(sudoKeepAliveStop)
-		sudoKeepAliveStop = nil
+// cleanupSudo removes the temporary askpass script
+func (a *App) cleanupSudo() {
+	if sudoAskpassScript != "" {
+		os.Remove(sudoAskpassScript)
+		sudoAskpassScript = ""
 	}
+	a.runner.SetSudoAskpass("")
 }
 
 func (a *App) runInstallations() error {
@@ -218,8 +228,8 @@ func (a *App) runInstallations() error {
 		fmt.Println()
 	}
 
-	// Stop sudo keep-alive
-	a.stopSudoKeepAlive()
+	// Cleanup sudo askpass script
+	a.cleanupSudo()
 
 	fmt.Println(headerStyle.Render("━━━━━━━━━━━━━━━━━━━━━━━"))
 	if hasError {
