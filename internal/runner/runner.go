@@ -39,7 +39,12 @@ func (r *Runner) Run(args []string, opts ...Option) *Result {
 
 	// Add sudo if needed
 	if options.sudo && os.Geteuid() != 0 {
-		args = append([]string{"sudo"}, args...)
+		if options.sudoNonInteractive {
+			// Use -n flag to fail if password is required (don't prompt)
+			args = append([]string{"sudo", "-n"}, args...)
+		} else {
+			args = append([]string{"sudo"}, args...)
+		}
 	}
 
 	cmdStr := strings.Join(args, " ")
@@ -73,6 +78,26 @@ func (r *Runner) Run(args []string, opts ...Option) *Result {
 	}
 
 	var stdout, stderr bytes.Buffer
+	// For sudo commands, connect to terminal to allow password prompt if needed
+	if options.sudo && !options.sudoNonInteractive {
+		cmd.Stdin = os.Stdin
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		r.CLI.ClearProgress()
+		err := cmd.Run()
+		if ctx.Err() == context.DeadlineExceeded {
+			return FailureResult("Command timed out", -1, ctx.Err())
+		}
+		if err != nil {
+			exitCode := -1
+			if exitErr, ok := err.(*exec.ExitError); ok {
+				exitCode = exitErr.ExitCode()
+			}
+			return FailureResult(err.Error(), exitCode, err)
+		}
+		return SuccessResult("")
+	}
+
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 
@@ -253,6 +278,7 @@ func (r *Runner) RemoveAll(path string) error {
 type runOptions struct {
 	description string
 	sudo        bool
+	sudoNonInteractive bool
 	env         map[string]string
 	cwd         string
 	timeout     time.Duration
@@ -269,9 +295,19 @@ func WithDescription(desc string) Option {
 }
 
 // WithSudo runs the command with sudo.
+// By default, sudo commands connect to the terminal to allow password prompts.
 func WithSudo() Option {
 	return func(o *runOptions) {
 		o.sudo = true
+	}
+}
+
+// WithSudoNonInteractive runs the command with sudo -n (non-interactive).
+// The command will fail if a password is required.
+func WithSudoNonInteractive() Option {
+	return func(o *runOptions) {
+		o.sudo = true
+		o.sudoNonInteractive = true
 	}
 }
 
