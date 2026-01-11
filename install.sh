@@ -1,9 +1,8 @@
 #!/usr/bin/env bash
 #
-# DevBootstrap - Script de lancement unifie
+# DevBootstrap - Script d'installation
 # Usage: curl -fsSL <url>/install.sh | bash
 #    or: ./install.sh
-#    or: ./install.sh --no-interaction
 #
 
 set -e
@@ -19,11 +18,11 @@ RESET='\033[0m'
 
 # Configuration
 REPO_URL="https://github.com/keyxmare/DevBootstrap"
-INSTALL_DIR="${HOME}/.devbootstrap"
+CACHE_DIR="${HOME}/.devbootstrap"
+BIN_DIR="${HOME}/.local/bin"
 BINARY_NAME="devbootstrap"
 
 # Global variables
-NO_INTERACTION=false
 BOOTSTRAP_ARGS=()
 
 # Parse command line arguments
@@ -34,17 +33,7 @@ parse_args() {
                 show_help
                 exit 0
                 ;;
-            -n|--no-interaction)
-                NO_INTERACTION=true
-                shift
-                ;;
-            -*)
-                # Pass remaining arguments to devbootstrap
-                BOOTSTRAP_ARGS+=("$1")
-                shift
-                ;;
             *)
-                # Pass remaining arguments to devbootstrap
                 BOOTSTRAP_ARGS+=("$1")
                 shift
                 ;;
@@ -62,20 +51,18 @@ show_help() {
     echo ""
     echo -e "${BOLD}Options:${RESET}"
     echo "  -h, --help            Affiche ce message d'aide"
-    echo "  -n, --no-interaction  Mode non-interactif (installe tout sans confirmation)"
-    echo "  -u, --uninstall       Mode desinstallation"
-    echo "  --dry-run             Simuler sans effectuer de changements"
     echo ""
-    echo -e "${BOLD}Exemples:${RESET}"
-    echo "  ./install.sh                      # Mode interactif (par defaut)"
-    echo "  ./install.sh --no-interaction     # Installe tout automatiquement"
-    echo "  ./install.sh -n                   # Raccourci pour --no-interaction"
+    echo -e "${BOLD}Apres installation:${RESET}"
+    echo "  devbootstrap                      # Mode interactif (par defaut)"
+    echo "  devbootstrap --no-interaction     # Installe tout automatiquement"
+    echo "  devbootstrap --uninstall          # Mode desinstallation"
+    echo "  devbootstrap --help               # Plus d'options"
     echo ""
 }
 
 print_banner() {
     echo -e "${CYAN}${BOLD}+==============================================================+${RESET}"
-    echo -e "${CYAN}${BOLD}|${RESET}           DevBootstrap - Installation automatique           ${CYAN}${BOLD}|${RESET}"
+    echo -e "${CYAN}${BOLD}|${RESET}           DevBootstrap - Installation                        ${CYAN}${BOLD}|${RESET}"
     echo -e "${CYAN}${BOLD}+==============================================================+${RESET}"
     echo ""
 }
@@ -136,28 +123,21 @@ detect_arch() {
     esac
 }
 
-check_go_binary() {
-    # Check if we have a pre-built Go binary
-    if [ -f "$INSTALL_DIR/$BINARY_NAME" ]; then
-        return 0
-    fi
-    return 1
-}
-
 download_or_build() {
-    print_step "Synchronisation de DevBootstrap..."
+    print_step "Telechargement de DevBootstrap..."
+
+    # Create directories
+    mkdir -p "$CACHE_DIR"
+    mkdir -p "$BIN_DIR"
 
     # Sync repository
     if command -v git &> /dev/null; then
-        if [ -d "$INSTALL_DIR/.git" ]; then
-            # Update existing repo silently
-            (cd "$INSTALL_DIR" && git fetch origin main --quiet 2>/dev/null && git reset --hard origin/main --quiet 2>/dev/null) || true
+        if [ -d "$CACHE_DIR/.git" ]; then
+            (cd "$CACHE_DIR" && git fetch origin main --quiet 2>/dev/null && git reset --hard origin/main --quiet 2>/dev/null) || true
         else
-            # Clone repository
-            rm -rf "$INSTALL_DIR" 2>/dev/null || true
-            git clone --depth=1 --quiet "$REPO_URL" "$INSTALL_DIR" 2>/dev/null || {
-                print_step "Telechargement de DevBootstrap..."
-                git clone --depth=1 "$REPO_URL" "$INSTALL_DIR"
+            rm -rf "$CACHE_DIR" 2>/dev/null || true
+            git clone --depth=1 --quiet "$REPO_URL" "$CACHE_DIR" 2>/dev/null || {
+                git clone --depth=1 "$REPO_URL" "$CACHE_DIR"
             }
         fi
     else
@@ -165,64 +145,89 @@ download_or_build() {
         exit 1
     fi
 
-    # Check if Go binary exists
-    if check_go_binary; then
-        print_success "DevBootstrap pret (binaire Go)"
+    # Check if Go binary exists in repo
+    if [ -f "$CACHE_DIR/$BINARY_NAME" ]; then
+        chmod +x "$CACHE_DIR/$BINARY_NAME"
+        cp "$CACHE_DIR/$BINARY_NAME" "$BIN_DIR/$BINARY_NAME"
+        print_success "DevBootstrap installe"
         return 0
     fi
 
-    # Check if we can build from source
-    if command -v go &> /dev/null && [ -f "$INSTALL_DIR/go.mod" ]; then
+    # Build from source if Go is available
+    if command -v go &> /dev/null && [ -f "$CACHE_DIR/go.mod" ]; then
         print_step "Compilation de DevBootstrap..."
-        (cd "$INSTALL_DIR" && go build -o "$BINARY_NAME" .) && {
-            print_success "DevBootstrap compile"
+        (cd "$CACHE_DIR" && go build -o "$BINARY_NAME" .) && {
+            cp "$CACHE_DIR/$BINARY_NAME" "$BIN_DIR/$BINARY_NAME"
+            chmod +x "$BIN_DIR/$BINARY_NAME"
+            print_success "DevBootstrap compile et installe"
             return 0
         }
     fi
 
-    # Fallback to Python if available
-    if command -v python3 &> /dev/null && [ -f "$INSTALL_DIR/bootstrap/__main__.py" ]; then
-        print_warning "Binaire Go non disponible, utilisation de la version Python"
-        return 1
-    fi
-
-    print_error "Impossible d'installer DevBootstrap (Go ou Python requis)"
+    print_error "Impossible d'installer DevBootstrap (binaire non disponible et Go non installe)"
     exit 1
 }
 
-run_installer() {
-    cd "$INSTALL_DIR"
-
-    # Build arguments
-    local args=()
-    if [ "$NO_INTERACTION" = true ]; then
-        args+=("--no-interaction")
-    fi
-    args+=("${BOOTSTRAP_ARGS[@]}")
-
-    # Prefer Go binary
-    if [ -f "$INSTALL_DIR/$BINARY_NAME" ]; then
-        chmod +x "$INSTALL_DIR/$BINARY_NAME" 2>/dev/null
-        print_step "Lancement de DevBootstrap..."
-        echo ""
-        "./$BINARY_NAME" "${args[@]}"
-        return $?
+configure_path() {
+    # Check if ~/.local/bin is already in PATH
+    if echo "$PATH" | grep -q "$HOME/.local/bin"; then
+        return 0
     fi
 
-    # Fallback to Python
-    if command -v python3 &> /dev/null && [ -f "$INSTALL_DIR/bootstrap/__main__.py" ]; then
-        print_step "Lancement de DevBootstrap (Python)..."
-        echo ""
-        python3 -m bootstrap "${args[@]}"
-        return $?
+    print_step "Configuration du PATH..."
+
+    local path_line='export PATH="$HOME/.local/bin:$PATH"'
+    local configured=false
+
+    # Add to .zshrc if using zsh
+    if [ -n "$ZSH_VERSION" ] || [ "$SHELL" = "/bin/zsh" ] || [ -f "$HOME/.zshrc" ]; then
+        if [ -f "$HOME/.zshrc" ]; then
+            if ! grep -q ".local/bin" "$HOME/.zshrc" 2>/dev/null; then
+                echo "" >> "$HOME/.zshrc"
+                echo "# Added by DevBootstrap" >> "$HOME/.zshrc"
+                echo "$path_line" >> "$HOME/.zshrc"
+                configured=true
+            fi
+        fi
     fi
 
-    print_error "Aucune version executable trouvee"
-    exit 1
+    # Add to .bashrc or .bash_profile
+    if [ -f "$HOME/.bashrc" ]; then
+        if ! grep -q ".local/bin" "$HOME/.bashrc" 2>/dev/null; then
+            echo "" >> "$HOME/.bashrc"
+            echo "# Added by DevBootstrap" >> "$HOME/.bashrc"
+            echo "$path_line" >> "$HOME/.bashrc"
+            configured=true
+        fi
+    elif [ -f "$HOME/.bash_profile" ]; then
+        if ! grep -q ".local/bin" "$HOME/.bash_profile" 2>/dev/null; then
+            echo "" >> "$HOME/.bash_profile"
+            echo "# Added by DevBootstrap" >> "$HOME/.bash_profile"
+            echo "$path_line" >> "$HOME/.bash_profile"
+            configured=true
+        fi
+    fi
+
+    if [ "$configured" = true ]; then
+        print_success "PATH configure"
+    fi
+}
+
+show_next_steps() {
+    echo ""
+    echo -e "${CYAN}${BOLD}Installation terminee!${RESET}"
+    echo ""
+    echo -e "${BOLD}Prochaines etapes:${RESET}"
+    echo ""
+    echo "  1. Redemarrez votre terminal ou executez:"
+    echo -e "     ${GREEN}source ~/.zshrc${RESET}  # ou ~/.bashrc"
+    echo ""
+    echo "  2. Lancez DevBootstrap:"
+    echo -e "     ${GREEN}devbootstrap${RESET}"
+    echo ""
 }
 
 main() {
-    # Parse arguments first
     parse_args "$@"
 
     echo ""
@@ -233,7 +238,6 @@ main() {
         print_error "Ne pas executer ce script avec sudo sur macOS."
         print_error "Homebrew ne fonctionne pas correctement en root."
         echo ""
-        print_step "Utilisez simplement: ./install.sh"
         exit 1
     fi
 
@@ -249,18 +253,28 @@ main() {
         exit 1
     fi
 
-    # Download/update and build if needed
+    # Download/build and install binary
     download_or_build
 
-    # Run the installer
-    run_installer
+    # Configure PATH
+    configure_path
+
+    # Show next steps
+    show_next_steps
+
+    # Run devbootstrap if arguments were passed
+    if [ ${#BOOTSTRAP_ARGS[@]} -gt 0 ]; then
+        echo ""
+        print_step "Lancement de DevBootstrap..."
+        echo ""
+        "$BIN_DIR/$BINARY_NAME" "${BOOTSTRAP_ARGS[@]}"
+    fi
 }
 
 # Check if script is being piped
 if [ -t 0 ]; then
     main "$@"
 else
-    # When piped, save stdin and restore it
     exec 3<&0
     main "$@" <&3
 fi

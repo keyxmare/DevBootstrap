@@ -4,7 +4,6 @@ package app
 import (
 	"github.com/keyxmare/DevBootstrap/internal/cli"
 	"github.com/keyxmare/DevBootstrap/internal/installers"
-	"github.com/keyxmare/DevBootstrap/internal/installers/alias"
 	"github.com/keyxmare/DevBootstrap/internal/installers/docker"
 	"github.com/keyxmare/DevBootstrap/internal/installers/font"
 	"github.com/keyxmare/DevBootstrap/internal/installers/neovim"
@@ -110,17 +109,6 @@ func NewRegistry(c *cli.CLI, r *runner.Runner, sysInfo *system.SystemInfo) *Regi
 		Tags:        []installers.AppTag{installers.TagFont},
 		Installer:   fontInstaller,
 		Uninstaller: fontInstaller,
-	})
-
-	// Alias
-	aliasInstaller := alias.NewInstaller(c, r, sysInfo)
-	reg.Apps = append(reg.Apps, &AppEntry{
-		ID:          "alias",
-		Name:        "Commande devbootstrap",
-		Description: "Installe la commande 'devbootstrap'",
-		Tags:        []installers.AppTag{installers.TagAlias},
-		Installer:   aliasInstaller,
-		Uninstaller: aliasInstaller,
 	})
 
 	return reg

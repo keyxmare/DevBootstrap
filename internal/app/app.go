@@ -417,8 +417,6 @@ func formatTags(tags []installers.AppTag) string {
 			tagStr = cli.Blue.Sprintf("[%s]", tag)
 		case installers.TagConfig:
 			tagStr = cli.Magenta.Sprintf("[%s]", tag)
-		case installers.TagAlias:
-			tagStr = cli.Cyan.Sprintf("[%s]", tag)
 		case installers.TagEditor:
 			tagStr = cli.Green.Sprintf("[%s]", tag)
 		case installers.TagShell:

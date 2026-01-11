@@ -13,7 +13,6 @@ type AppTag string
 const (
 	TagApp       AppTag = "app"
 	TagConfig    AppTag = "config"
-	TagAlias     AppTag = "alias"
 	TagEditor    AppTag = "editeur"
 	TagShell     AppTag = "shell"
 	TagContainer AppTag = "container"
