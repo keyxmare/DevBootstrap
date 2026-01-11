@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"time"
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/spf13/cobra"
@@ -61,7 +62,10 @@ Applications disponibles:
 	},
 }
 
-// preCacheSudo asks for sudo password upfront
+// sudoKeepAlive keeps sudo credentials fresh in the background
+var sudoKeepAliveStop chan struct{}
+
+// preCacheSudo asks for sudo password upfront and keeps it alive
 func preCacheSudo(sysInfo *system.SystemInfo) {
 	// Skip if already root
 	if sysInfo.IsRoot {
@@ -81,7 +85,8 @@ func preCacheSudo(sysInfo *system.SystemInfo) {
 	// Check if sudo credentials are already cached
 	checkCmd := exec.Command("sudo", "-n", "true")
 	if checkCmd.Run() == nil {
-		// Already authenticated
+		// Already authenticated, start keep-alive
+		startSudoKeepAlive()
 		return
 	}
 
@@ -102,6 +107,33 @@ func preCacheSudo(sysInfo *system.SystemInfo) {
 		fmt.Println()
 	} else {
 		fmt.Println()
+		// Start background process to keep sudo alive
+		startSudoKeepAlive()
+	}
+}
+
+// startSudoKeepAlive starts a goroutine that refreshes sudo every 60 seconds
+func startSudoKeepAlive() {
+	sudoKeepAliveStop = make(chan struct{})
+	go func() {
+		ticker := time.NewTicker(60 * time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				// Refresh sudo timestamp
+				exec.Command("sudo", "-v").Run()
+			case <-sudoKeepAliveStop:
+				return
+			}
+		}
+	}()
+}
+
+// stopSudoKeepAlive stops the sudo keep-alive goroutine
+func stopSudoKeepAlive() {
+	if sudoKeepAliveStop != nil {
+		close(sudoKeepAliveStop)
 	}
 }
 
@@ -137,8 +169,10 @@ func runTUI(sysInfo *system.SystemInfo) {
 	// Run
 	if err := tuiApp.Run(); err != nil {
 		fmt.Fprintf(os.Stderr, "Erreur: %v\n", err)
+		stopSudoKeepAlive()
 		os.Exit(1)
 	}
+	stopSudoKeepAlive()
 }
 
 // Execute adds all child commands to the root command and sets flags appropriately.
