@@ -3,6 +3,7 @@
 # DevBootstrap - Script de lancement unifié
 # Usage: curl -fsSL <url>/install.sh | bash
 #    or: ./install.sh
+#    or: ./install.sh --no-interaction
 #
 
 set -e
@@ -20,8 +21,55 @@ RESET='\033[0m'
 REPO_URL="https://github.com/keyxmare/DevBootstrap"
 INSTALL_DIR="${HOME}/.devbootstrap"
 
-# Global variable for Python command
+# Global variables
 PYTHON_CMD=""
+NO_INTERACTION=false
+
+# Parse command line arguments
+parse_args() {
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            -h|--help)
+                show_help
+                exit 0
+                ;;
+            -n|--no-interaction)
+                NO_INTERACTION=true
+                shift
+                ;;
+            -*)
+                print_error "Option inconnue: $1"
+                show_help
+                exit 1
+                ;;
+            *)
+                # Pass remaining arguments to bootstrap
+                break
+                ;;
+        esac
+    done
+    # Store remaining args for bootstrap
+    BOOTSTRAP_ARGS=("$@")
+}
+
+show_help() {
+    echo ""
+    echo -e "${BOLD}DevBootstrap${RESET} - Installation automatique de l'environnement de développement"
+    echo ""
+    echo -e "${BOLD}Usage:${RESET}"
+    echo "  curl -fsSL https://raw.githubusercontent.com/keyxmare/DevBootstrap/main/install.sh | bash"
+    echo "  ./install.sh [options]"
+    echo ""
+    echo -e "${BOLD}Options:${RESET}"
+    echo "  -h, --help            Affiche ce message d'aide"
+    echo "  -n, --no-interaction  Mode non-interactif (installe tout sans confirmation)"
+    echo ""
+    echo -e "${BOLD}Exemples:${RESET}"
+    echo "  ./install.sh                      # Mode interactif (par défaut)"
+    echo "  ./install.sh --no-interaction     # Installe tout automatiquement"
+    echo "  ./install.sh -n                   # Raccourci pour --no-interaction"
+    echo ""
+}
 
 print_banner() {
     echo -e "${CYAN}${BOLD}╔══════════════════════════════════════════════════════════════╗${RESET}"
@@ -183,11 +231,21 @@ run_installer() {
 
     cd "$INSTALL_DIR"
 
+    # Build arguments for bootstrap
+    local args=()
+    if [ "$NO_INTERACTION" = true ]; then
+        args+=("--no-interaction")
+    fi
+    args+=("${BOOTSTRAP_ARGS[@]}")
+
     # Run the unified Python installer (bootstrap module)
-    "$PYTHON_CMD" -m bootstrap "$@"
+    "$PYTHON_CMD" -m bootstrap "${args[@]}"
 }
 
 main() {
+    # Parse arguments first
+    parse_args "$@"
+
     echo ""
     print_banner
 
@@ -209,7 +267,7 @@ main() {
     download_installer
 
     # Run the installer
-    run_installer "$@"
+    run_installer
 }
 
 # Check if script is being piped

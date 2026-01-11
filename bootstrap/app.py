@@ -35,9 +35,10 @@ class BootstrapApp:
 
     VERSION = "1.0.0"
 
-    def __init__(self, dry_run: bool = False):
+    def __init__(self, dry_run: bool = False, no_interaction: bool = False):
         """Initialize the application."""
         self.dry_run = dry_run
+        self.no_interaction = no_interaction
         self.use_colors = sys.stdout.isatty()
         if not self.use_colors:
             Colors.disable()
