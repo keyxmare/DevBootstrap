@@ -60,4 +60,12 @@ AVAILABLE_APPS = [
         version_command="zsh --version | head -1",
         module="zsh_installer.app"
     ),
+    AppInfo(
+        id="alias",
+        name="Commande devbootstrap",
+        description="Installe la commande 'devbootstrap' pour lancer l'installation via curl",
+        check_command="devbootstrap",
+        version_command=None,
+        module="alias_installer.app"
+    ),
 ]

@@ -281,6 +281,10 @@ class BootstrapApp:
                 from zsh_installer.app import ZshInstallerApp
                 installer = ZshInstallerApp(dry_run=self.dry_run)
                 return installer.run() == 0
+            elif app.id == "alias":
+                from alias_installer.app import AliasInstallerApp
+                installer = AliasInstallerApp(dry_run=self.dry_run)
+                return installer.run() == 0
             else:
                 self.print_error(f"Installateur inconnu pour {app.name}")
                 return False

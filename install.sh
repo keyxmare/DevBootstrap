@@ -20,7 +20,7 @@ BOLD='\033[1m'
 RESET='\033[0m'
 
 # Configuration
-REPO_URL="https://github.com/keyxmare/DebBootstrap"
+REPO_URL="https://github.com/keyxmare/DevBootstrap"
 INSTALL_DIR="${HOME}/.devbootstrap"
 
 print_banner() {
@@ -167,7 +167,7 @@ download_installer() {
 
         rm -rf "$INSTALL_DIR"
         unzip -q "$TEMP_ZIP" -d /tmp
-        mv /tmp/DebBootstrap-main "$INSTALL_DIR"
+        mv /tmp/DevBootstrap-main "$INSTALL_DIR"
         rm "$TEMP_ZIP"
     fi
 
