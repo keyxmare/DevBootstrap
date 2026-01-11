@@ -24,27 +24,27 @@ REPO_URL="https://github.com/keyxmare/DevBootstrap"
 INSTALL_DIR="${HOME}/.devbootstrap"
 
 print_banner() {
-    echo ""
-    echo -e "${CYAN}${BOLD}╔════════════════════════════════════════════════════════════════╗${RESET}"
-    echo -e "${CYAN}${BOLD}║${RESET}              ${BOLD}DevBootstrap${RESET} - Installation automatique              ${CYAN}${BOLD}║${RESET}"
-    echo -e "${CYAN}${BOLD}╚════════════════════════════════════════════════════════════════╝${RESET}"
-    echo ""
+    echo "" >&2
+    echo -e "${CYAN}${BOLD}╔════════════════════════════════════════════════════════════════╗${RESET}" >&2
+    echo -e "${CYAN}${BOLD}║${RESET}              ${BOLD}DevBootstrap${RESET} - Installation automatique              ${CYAN}${BOLD}║${RESET}" >&2
+    echo -e "${CYAN}${BOLD}╚════════════════════════════════════════════════════════════════╝${RESET}" >&2
+    echo "" >&2
 }
 
 print_step() {
-    echo -e "${BLUE}▶${RESET} $1"
+    echo -e "${BLUE}▶${RESET} $1" >&2
 }
 
 print_success() {
-    echo -e "${GREEN}✓${RESET} $1"
+    echo -e "${GREEN}✓${RESET} $1" >&2
 }
 
 print_error() {
-    echo -e "${RED}✗${RESET} $1"
+    echo -e "${RED}✗${RESET} $1" >&2
 }
 
 print_warning() {
-    echo -e "${YELLOW}⚠${RESET} $1"
+    echo -e "${YELLOW}⚠${RESET} $1" >&2
 }
 
 detect_os() {
@@ -176,14 +176,15 @@ download_installer() {
 
 run_installer() {
     PYTHON_CMD="$1"
+    shift  # Remove PYTHON_CMD from arguments
 
     print_step "Lancement du menu d'installation..."
-    echo ""
+    echo "" >&2
 
     cd "$INSTALL_DIR"
 
     # Run the unified Python installer (bootstrap module)
-    "$PYTHON_CMD" -m bootstrap.app "$@"
+    "$PYTHON_CMD" -m bootstrap "$@"
 }
 
 main() {
@@ -206,7 +207,7 @@ main() {
     download_installer
 
     # Run the installer
-    run_installer "$PYTHON_CMD" "${@:2}"
+    run_installer "$PYTHON_CMD" "$@"
 }
 
 # Check if script is being piped
