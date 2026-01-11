@@ -165,12 +165,29 @@ class AliasInstallerApp:
         return f'\n# DevBootstrap command\nalias {self.COMMAND_NAME}=\'{curl_cmd}\'\n'
 
     def _get_function_line(self) -> str:
-        """Get a shell function (alternative to alias for more flexibility)."""
-        curl_cmd = self.CURL_COMMAND.format(repo=self.GITHUB_REPO)
+        """Get a shell function that syncs silently then runs locally."""
         return f'''
-# DevBootstrap command
+# DevBootstrap command - syncs silently then runs locally
 {self.COMMAND_NAME}() {{
-    {curl_cmd}
+    local INSTALL_DIR="${{HOME}}/.devbootstrap"
+    local REPO_URL="https://github.com/{self.GITHUB_REPO}"
+
+    # Sync silently (ignore errors)
+    if command -v git &> /dev/null; then
+        if [ -d "$INSTALL_DIR/.git" ]; then
+            (cd "$INSTALL_DIR" && git fetch origin main --quiet && git reset --hard origin/main --quiet) &>/dev/null
+        else
+            (rm -rf "$INSTALL_DIR" && git clone --depth=1 --quiet "$REPO_URL" "$INSTALL_DIR") &>/dev/null
+        fi
+    fi
+
+    # Run bootstrap (or show error if not installed)
+    if [ -d "$INSTALL_DIR" ] && [ -f "$INSTALL_DIR/bootstrap/__main__.py" ]; then
+        (cd "$INSTALL_DIR" && python3 -m bootstrap "$@")
+    else
+        echo "DevBootstrap n'est pas installe. Executez: curl -fsSL https://raw.githubusercontent.com/{self.GITHUB_REPO}/main/install.sh | bash"
+        return 1
+    fi
 }}
 '''
 
@@ -220,13 +237,48 @@ class AliasInstallerApp:
             # Create bin directory if it doesn't exist
             os.makedirs(bin_dir, exist_ok=True)
 
-            # Create the script
-            curl_cmd = self.CURL_COMMAND.format(repo=self.GITHUB_REPO)
+            # Create the script that syncs silently then runs locally
             script_content = f'''#!/bin/bash
 # DevBootstrap - Installation automatique de l'environnement de developpement
 # https://github.com/{self.GITHUB_REPO}
 
-{curl_cmd}
+INSTALL_DIR="${{HOME}}/.devbootstrap"
+REPO_URL="https://github.com/{self.GITHUB_REPO}"
+
+# Sync repository silently (ignore errors, continue with local version)
+sync_repo() {{
+    if command -v git &> /dev/null; then
+        if [ -d "$INSTALL_DIR/.git" ]; then
+            # Update existing repo
+            cd "$INSTALL_DIR" && git fetch origin main --quiet 2>/dev/null && git reset --hard origin/main --quiet 2>/dev/null
+        else
+            # Clone if not exists
+            rm -rf "$INSTALL_DIR" 2>/dev/null
+            git clone --depth=1 --quiet "$REPO_URL" "$INSTALL_DIR" 2>/dev/null
+        fi
+    fi
+}}
+
+# Sync in background (silent)
+sync_repo &>/dev/null
+
+# Wait for sync to complete (max 5 seconds)
+wait
+
+# Check if we have a local installation
+if [ ! -d "$INSTALL_DIR" ] || [ ! -f "$INSTALL_DIR/bootstrap/__main__.py" ]; then
+    echo "DevBootstrap n'est pas installe. Telechargement..."
+    if command -v git &> /dev/null; then
+        git clone --depth=1 "$REPO_URL" "$INSTALL_DIR"
+    else
+        echo "Erreur: git est requis pour installer DevBootstrap"
+        exit 1
+    fi
+fi
+
+# Run bootstrap
+cd "$INSTALL_DIR"
+python3 -m bootstrap "$@"
 '''
 
             with open(script_path, "w") as f:
@@ -329,9 +381,10 @@ class AliasInstallerApp:
         self.print(f"   $ {self.COMMAND_NAME}")
         self.print()
 
-        self.print(f"{Colors.BOLD}Cette commande executera:{Colors.RESET}")
-        curl_cmd = self.CURL_COMMAND.format(repo=self.GITHUB_REPO)
-        self.print(f"   {curl_cmd}")
+        self.print(f"{Colors.BOLD}Comportement:{Colors.RESET}")
+        self.print(f"   - Synchronise automatiquement avec GitHub (silencieux)")
+        self.print(f"   - En cas d'echec, utilise la version locale")
+        self.print(f"   - Lance le menu DevBootstrap")
         self.print()
 
     def run(self) -> int:
