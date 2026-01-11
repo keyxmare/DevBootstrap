@@ -24,9 +24,9 @@ INSTALL_DIR="${HOME}/.devbootstrap"
 PYTHON_CMD=""
 
 print_banner() {
-    echo -e "${CYAN}${BOLD}╔════════════════════════════════════════════════════════════════╗${RESET}"
-    echo -e "${CYAN}${BOLD}║${RESET}              ${BOLD}DevBootstrap${RESET} - Installation automatique              ${CYAN}${BOLD}║${RESET}"
-    echo -e "${CYAN}${BOLD}╚════════════════════════════════════════════════════════════════╝${RESET}"
+    echo -e "${CYAN}${BOLD}╔══════════════════════════════════════════════════════════════╗${RESET}"
+    echo -e "${CYAN}${BOLD}║${RESET}          ${BOLD}DevBootstrap${RESET} - Installation automatique            ${CYAN}${BOLD}║${RESET}"
+    echo -e "${CYAN}${BOLD}╚══════════════════════════════════════════════════════════════╝${RESET}"
     echo ""
 }
 
