@@ -39,9 +39,11 @@ class CommandRunner:
         """Run a command and return the result."""
         use_sudo = sudo if sudo is not None else self.use_sudo
 
-        # Prepend sudo if needed
+        # Prepend sudo if needed, preserving PATH for Homebrew access
         if use_sudo and os.geteuid() != 0:
-            command = ["sudo"] + command
+            # Use sudo with PATH preservation to find Homebrew and other user-installed commands
+            current_path = os.environ.get("PATH", "")
+            command = ["sudo", f"PATH={current_path}", "env"] + command
 
         cmd_str = " ".join(command)
 
@@ -119,7 +121,9 @@ class CommandRunner:
         use_sudo = sudo if sudo is not None else self.use_sudo
 
         if use_sudo and os.geteuid() != 0:
-            command = ["sudo"] + command
+            # Use sudo with PATH preservation to find Homebrew and other user-installed commands
+            current_path = os.environ.get("PATH", "")
+            command = ["sudo", f"PATH={current_path}", "env"] + command
 
         if description:
             self.cli.print_info(description)
