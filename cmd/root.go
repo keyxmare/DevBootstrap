@@ -61,13 +61,8 @@ Applications disponibles:
 	},
 }
 
-// preCacheSudo asks for sudo password upfront on Linux systems
+// preCacheSudo asks for sudo password upfront
 func preCacheSudo(sysInfo *system.SystemInfo) {
-	// On macOS, Homebrew doesn't need sudo, so skip
-	if sysInfo.IsMacOS() {
-		return
-	}
-
 	// Skip if already root
 	if sysInfo.IsRoot {
 		return
