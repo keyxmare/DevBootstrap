@@ -21,6 +21,7 @@ class AppInfo:
     check_command: str  # Command to check if installed
     version_command: Optional[str] = None  # Command to get version
     module: Optional[str] = None  # Python module to import for installation
+    macos_app_paths: Optional[list[str]] = None  # macOS .app paths to check
 
 
 # Registry of all available applications
@@ -31,7 +32,8 @@ AVAILABLE_APPS = [
         description="Plateforme de conteneurisation",
         check_command="docker",
         version_command="docker --version",
-        module="docker_installer.app"
+        module="docker_installer.app",
+        macos_app_paths=["/Applications/Docker.app"]
     ),
     AppInfo(
         id="vscode",
@@ -39,7 +41,8 @@ AVAILABLE_APPS = [
         description="Éditeur de code source léger et puissant",
         check_command="code",
         version_command="code --version | head -1",
-        module="vscode_installer.app"
+        module="vscode_installer.app",
+        macos_app_paths=["/Applications/Visual Studio Code.app"]
     ),
     AppInfo(
         id="neovim",
@@ -48,5 +51,13 @@ AVAILABLE_APPS = [
         check_command="nvim",
         version_command="nvim --version | head -1",
         module="nvim_installer.app"
+    ),
+    AppInfo(
+        id="zsh",
+        name="Zsh + Oh My Zsh",
+        description="Shell Z moderne avec Oh My Zsh et autocomplétion",
+        check_command="zsh",
+        version_command="zsh --version | head -1",
+        module="zsh_installer.app"
     ),
 ]

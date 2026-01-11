@@ -84,11 +84,24 @@ class BootstrapApp:
 
     def check_app_status(self, app: AppInfo) -> tuple[AppStatus, Optional[str]]:
         """Check if an application is installed and get its version."""
-        if not shutil.which(app.check_command):
+        import os
+
+        # Check if command exists in PATH
+        command_exists = shutil.which(app.check_command) is not None
+
+        # Check macOS app paths if command not in PATH
+        app_exists = False
+        if not command_exists and app.macos_app_paths:
+            for app_path in app.macos_app_paths:
+                if os.path.exists(app_path):
+                    app_exists = True
+                    break
+
+        if not command_exists and not app_exists:
             return AppStatus.NOT_INSTALLED, None
 
         version = None
-        if app.version_command:
+        if app.version_command and command_exists:
             try:
                 result = subprocess.run(
                     app.version_command,
@@ -101,6 +114,10 @@ class BootstrapApp:
                     version = result.stdout.strip().split('\n')[0]
             except (subprocess.TimeoutExpired, Exception):
                 pass
+
+        # If app exists but no version (command not in PATH)
+        if app_exists and not version:
+            version = "(commande 'code' non configurée)"
 
         return AppStatus.INSTALLED, version
 
@@ -259,6 +276,10 @@ class BootstrapApp:
             elif app.id == "vscode":
                 from vscode_installer.app import VSCodeInstallerApp
                 installer = VSCodeInstallerApp(dry_run=self.dry_run)
+                return installer.run() == 0
+            elif app.id == "zsh":
+                from zsh_installer.app import ZshInstallerApp
+                installer = ZshInstallerApp(dry_run=self.dry_run)
                 return installer.run() == 0
             else:
                 self.print_error(f"Installateur inconnu pour {app.name}")

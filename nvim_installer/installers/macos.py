@@ -53,12 +53,6 @@ class MacOSInstaller(BaseInstaller):
             required=False
         ),
         Dependency(
-            name="tree-sitter",
-            description="Parser pour la coloration syntaxique",
-            check_command="tree-sitter",
-            required=False
-        ),
-        Dependency(
             name="lua",
             description="Langage Lua (pour la configuration)",
             check_command="lua",

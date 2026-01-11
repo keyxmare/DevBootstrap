@@ -15,7 +15,6 @@ from .utils.runner import CommandRunner
 class ConfigPreset(Enum):
     """Available configuration presets."""
     MINIMAL = "minimal"
-    STANDARD = "standard"
     FULL = "full"
     CUSTOM = "custom"
 
@@ -23,7 +22,7 @@ class ConfigPreset(Enum):
 @dataclass
 class ConfigOptions:
     """Configuration options."""
-    preset: ConfigPreset = ConfigPreset.STANDARD
+    preset: ConfigPreset = ConfigPreset.FULL
     config_dir: str = ""
     backup_existing: bool = True
     install_plugins: bool = True
@@ -89,8 +88,6 @@ class ConfigManager:
 
         if preset == ConfigPreset.MINIMAL:
             return self._install_minimal_config()
-        elif preset == ConfigPreset.STANDARD:
-            return self._install_standard_config()
         elif preset == ConfigPreset.FULL:
             return self._install_full_config()
         else:
@@ -432,50 +429,41 @@ return {
 }
 '''
 
-        # Plugin: treesitter
-        treesitter_content = '''-- Treesitter configuration
+        # Plugin: treesitter (Neovim 0.11+ native API)
+        treesitter_content = '''-- Treesitter configuration (Neovim 0.11+)
 return {
   {
     "nvim-treesitter/nvim-treesitter",
     build = ":TSUpdate",
-    event = { "BufReadPost", "BufNewFile" },
-    dependencies = {
-      "nvim-treesitter/nvim-treesitter-textobjects",
-    },
+    lazy = false,
     config = function()
-      require("nvim-treesitter.configs").setup({
-        ensure_installed = {
-          "bash",
-          "c",
-          "html",
-          "javascript",
-          "json",
-          "lua",
-          "luadoc",
-          "luap",
-          "markdown",
-          "markdown_inline",
-          "python",
-          "query",
-          "regex",
-          "tsx",
-          "typescript",
-          "vim",
-          "vimdoc",
-          "yaml",
-        },
-        auto_install = true,
-        highlight = { enable = true },
-        indent = { enable = true },
-        incremental_selection = {
-          enable = true,
-          keymaps = {
-            init_selection = "<C-space>",
-            node_incremental = "<C-space>",
-            scope_incremental = false,
-            node_decremental = "<bs>",
-          },
-        },
+      -- Neovim 0.11+ utilise vim.treesitter directement
+      -- Activer le highlighting pour tous les buffers
+      vim.api.nvim_create_autocmd("FileType", {
+        callback = function(args)
+          pcall(vim.treesitter.start, args.buf)
+        end,
+      })
+
+      -- Installer les parsers manquants automatiquement
+      local parsers = {
+        "bash", "c", "css", "dockerfile", "html", "javascript",
+        "json", "lua", "markdown", "markdown_inline", "php",
+        "python", "sql", "toml", "tsx", "typescript", "vim",
+        "vimdoc", "yaml",
+      }
+
+      vim.api.nvim_create_autocmd("VimEnter", {
+        once = true,
+        callback = function()
+          for _, lang in ipairs(parsers) do
+            pcall(function()
+              if not vim.treesitter.language.get_lang(lang) then
+                vim.cmd("TSInstall " .. lang)
+              end
+            end)
+          end
+        end,
       })
     end,
   },
@@ -532,19 +520,13 @@ return {
 }
 '''
 
-        # Plugin: LSP
-        lsp_content = '''-- LSP configuration
+        # Plugin: LSP (Neovim 0.11+ API)
+        lsp_content = '''-- LSP configuration (Neovim 0.11+ API)
 return {
   {
-    "neovim/nvim-lspconfig",
-    event = { "BufReadPre", "BufNewFile" },
-    dependencies = {
-      "williamboman/mason.nvim",
-      "williamboman/mason-lspconfig.nvim",
-      { "j-hui/fidget.nvim", opts = {} },
-    },
+    "williamboman/mason.nvim",
+    lazy = false,
     config = function()
-      -- Setup Mason first
       require("mason").setup({
         ui = {
           border = "rounded",
@@ -555,7 +537,13 @@ return {
           },
         },
       })
-
+    end,
+  },
+  {
+    "williamboman/mason-lspconfig.nvim",
+    lazy = false,
+    dependencies = { "williamboman/mason.nvim" },
+    config = function()
       require("mason-lspconfig").setup({
         ensure_installed = {
           "lua_ls",
@@ -564,7 +552,17 @@ return {
         },
         automatic_installation = true,
       })
-
+    end,
+  },
+  {
+    "neovim/nvim-lspconfig",
+    lazy = false,
+    dependencies = {
+      "williamboman/mason.nvim",
+      "williamboman/mason-lspconfig.nvim",
+      { "j-hui/fidget.nvim", opts = {} },
+    },
+    config = function()
       -- LSP keymaps
       vim.api.nvim_create_autocmd("LspAttach", {
         group = vim.api.nvim_create_augroup("lsp-attach", { clear = true }),
@@ -585,18 +583,15 @@ return {
         end,
       })
 
-      -- Configure LSP servers
-      local lspconfig = require("lspconfig")
+      -- Capabilities (avec support nvim-cmp si disponible)
       local capabilities = vim.lsp.protocol.make_client_capabilities()
-
-      -- Try to enhance with cmp capabilities
       local ok, cmp_lsp = pcall(require, "cmp_nvim_lsp")
       if ok then
         capabilities = vim.tbl_deep_extend("force", capabilities, cmp_lsp.default_capabilities())
       end
 
-      -- Lua
-      lspconfig.lua_ls.setup({
+      -- Configuration des serveurs LSP avec la nouvelle API vim.lsp.config
+      vim.lsp.config("lua_ls", {
         capabilities = capabilities,
         settings = {
           Lua = {
@@ -607,11 +602,16 @@ return {
         },
       })
 
-      -- Python
-      lspconfig.pyright.setup({ capabilities = capabilities })
+      vim.lsp.config("pyright", {
+        capabilities = capabilities,
+      })
 
-      -- TypeScript
-      lspconfig.ts_ls.setup({ capabilities = capabilities })
+      vim.lsp.config("ts_ls", {
+        capabilities = capabilities,
+      })
+
+      -- Activer les serveurs configurés
+      vim.lsp.enable({ "lua_ls", "pyright", "ts_ls" })
     end,
   },
 }

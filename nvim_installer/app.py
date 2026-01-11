@@ -127,9 +127,8 @@ class NeovimInstallerApp:
         preset_choice = self.cli.ask_choice(
             "Quel preset de configuration utiliser?",
             [
-                "Minimal - Options de base uniquement",
-                "Standard - Plugins essentiels (Telescope, LSP, Treesitter)",
-                "Full - Configuration complète avec tous les plugins",
+                "Minimal - Options de base uniquement (sans plugins)",
+                "Complet - Configuration complète avec tous les plugins",
                 "Personnalisé - Importer depuis un chemin/URL"
             ],
             default=1
@@ -137,9 +136,8 @@ class NeovimInstallerApp:
 
         preset_map = {
             0: ConfigPreset.MINIMAL,
-            1: ConfigPreset.STANDARD,
-            2: ConfigPreset.FULL,
-            3: ConfigPreset.CUSTOM
+            1: ConfigPreset.FULL,
+            2: ConfigPreset.CUSTOM
         }
 
         preset = preset_map[preset_choice]
@@ -151,8 +149,8 @@ class NeovimInstallerApp:
                 default=""
             )
             if not custom_path:
-                self.cli.print_warning("Aucun chemin fourni, utilisation du preset Standard")
-                preset = ConfigPreset.STANDARD
+                self.cli.print_warning("Aucun chemin fourni, utilisation du preset Complet")
+                preset = ConfigPreset.FULL
 
         # Ask about plugin sync
         install_plugins = self.cli.ask_yes_no(
