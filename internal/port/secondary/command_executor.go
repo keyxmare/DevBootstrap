@@ -24,6 +24,7 @@ type CommandOptions struct {
 	WorkingDir         string
 	Timeout            time.Duration
 	Interactive        bool
+	SkipDryRun         bool // Execute even in dry-run mode (for status checks)
 }
 
 // CommandOption is a functional option for CommandOptions.
@@ -76,6 +77,14 @@ func WithTimeout(timeout time.Duration) CommandOption {
 func WithInteractive() CommandOption {
 	return func(o *CommandOptions) {
 		o.Interactive = true
+	}
+}
+
+// WithSkipDryRun allows a command to execute even in dry-run mode.
+// Use this for status checks that need real results.
+func WithSkipDryRun() CommandOption {
+	return func(o *CommandOptions) {
+		o.SkipDryRun = true
 	}
 }
 

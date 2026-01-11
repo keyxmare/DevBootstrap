@@ -46,7 +46,7 @@ func (s *MacOSStrategy) getDMGURL() string {
 func (s *MacOSStrategy) CheckStatus(ctx context.Context) (valueobject.AppStatus, string, error) {
 	// Check if docker command exists and daemon is accessible
 	if s.CommandExists("docker") {
-		res := s.Run(ctx, []string{"docker", "info"}, secondary.WithTimeout(10*time.Second))
+		res := s.Run(ctx, []string{"docker", "info"}, secondary.WithTimeout(10*time.Second), secondary.WithSkipDryRun())
 		if res.Success {
 			version := s.GetCommandVersion("docker")
 			return valueobject.StatusInstalled, version, nil

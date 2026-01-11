@@ -50,7 +50,7 @@ func (s *Strategy) CheckStatus(ctx context.Context) (valueobject.AppStatus, stri
 		// Check via Homebrew
 		brewPath := s.getHomebrewPath()
 		if brewPath != "" {
-			res := s.Run(ctx, []string{brewPath, "list", "--cask"})
+			res := s.Run(ctx, []string{brewPath, "list", "--cask"}, secondary.WithSkipDryRun())
 			if res.Success {
 				for _, font := range AvailableFonts {
 					if strings.Contains(res.Stdout, font.HomebrewCask) {

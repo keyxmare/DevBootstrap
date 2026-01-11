@@ -59,7 +59,7 @@ func (e *ShellExecutor) Execute(ctx context.Context, args []string, opts ...seco
 		e.reporter.Progress(options.Description)
 	}
 
-	if e.dryRun {
+	if e.dryRun && !options.SkipDryRun {
 		if e.reporter != nil {
 			e.reporter.ClearProgress()
 			e.reporter.Info(fmt.Sprintf("[DRY RUN] %s", cmdStr))
@@ -181,7 +181,7 @@ func (e *ShellExecutor) GetCommandVersion(name string, versionArg string) string
 		versionArg = "--version"
 	}
 
-	result := e.Execute(context.Background(), []string{name, versionArg})
+	result := e.Execute(context.Background(), []string{name, versionArg}, secondary.WithSkipDryRun())
 	if result.Success {
 		lines := strings.Split(result.Stdout, "\n")
 		if len(lines) > 0 {
