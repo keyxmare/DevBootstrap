@@ -259,7 +259,10 @@ func (i *OhMyZshInstaller) Install(opts *installers.InstallOptions) *installers.
 	i.installPlugins(opts.ZshPlugins)
 
 	// Set Zsh as default shell
-	if i.CLI.AskYesNo("Definir Zsh comme shell par defaut?", true) {
+	// In NoInteraction mode (TUI), set automatically. Otherwise, ask.
+	if opts.NoInteraction {
+		i.setDefaultShell()
+	} else if i.CLI.AskYesNo("Definir Zsh comme shell par defaut?", true) {
 		i.setDefaultShell()
 	}
 

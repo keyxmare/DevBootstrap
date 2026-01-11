@@ -121,11 +121,12 @@ func (a *App) preCacheSudo() {
 	fmt.Println()
 }
 
-// startSudoKeepAlive starts a goroutine that refreshes sudo every 30 seconds
+// startSudoKeepAlive starts a goroutine that refreshes sudo every 10 seconds
 func (a *App) startSudoKeepAlive() {
 	sudoKeepAliveStop = make(chan struct{})
 	go func() {
-		ticker := time.NewTicker(30 * time.Second)
+		// Refresh immediately, then every 10 seconds
+		ticker := time.NewTicker(10 * time.Second)
 		defer ticker.Stop()
 		for {
 			select {
