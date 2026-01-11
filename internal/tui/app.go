@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -75,7 +76,10 @@ func (a *App) Run() error {
 	return nil
 }
 
-// preCacheSudo asks for sudo password upfront
+// sudoKeepAliveStop is used to stop the sudo keep-alive goroutine
+var sudoKeepAliveStop chan struct{}
+
+// preCacheSudo asks for sudo password upfront and starts keep-alive
 func (a *App) preCacheSudo() {
 	// Skip if already root or in dry-run mode
 	if a.sysInfo.IsRoot || a.dryRun {
@@ -90,7 +94,9 @@ func (a *App) preCacheSudo() {
 	// Check if sudo credentials are already cached
 	checkCmd := exec.Command("sudo", "-n", "true")
 	if checkCmd.Run() == nil {
-		return // Already authenticated
+		// Already authenticated, start keep-alive
+		a.startSudoKeepAlive()
+		return
 	}
 
 	// Ask for password
@@ -108,8 +114,37 @@ func (a *App) preCacheSudo() {
 	if err := sudoCmd.Run(); err != nil {
 		errorStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#EF4444"))
 		fmt.Println(errorStyle.Render("⚠ Impossible d'obtenir les droits sudo. Certaines installations peuvent échouer."))
+	} else {
+		// Start keep-alive to maintain sudo credentials during installations
+		a.startSudoKeepAlive()
 	}
 	fmt.Println()
+}
+
+// startSudoKeepAlive starts a goroutine that refreshes sudo every 30 seconds
+func (a *App) startSudoKeepAlive() {
+	sudoKeepAliveStop = make(chan struct{})
+	go func() {
+		ticker := time.NewTicker(30 * time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				// Refresh sudo timestamp silently
+				exec.Command("sudo", "-v").Run()
+			case <-sudoKeepAliveStop:
+				return
+			}
+		}
+	}()
+}
+
+// stopSudoKeepAlive stops the sudo keep-alive goroutine
+func (a *App) stopSudoKeepAlive() {
+	if sudoKeepAliveStop != nil {
+		close(sudoKeepAliveStop)
+		sudoKeepAliveStop = nil
+	}
 }
 
 func (a *App) runInstallations() error {
@@ -175,6 +210,9 @@ func (a *App) runInstallations() error {
 		}
 		fmt.Println()
 	}
+
+	// Stop sudo keep-alive
+	a.stopSudoKeepAlive()
 
 	fmt.Println(headerStyle.Render("━━━━━━━━━━━━━━━━━━━━━━━"))
 	if hasError {
