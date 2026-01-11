@@ -4,7 +4,9 @@ package cmd
 import (
 	"fmt"
 	"os"
+	"os/exec"
 
+	"github.com/charmbracelet/lipgloss"
 	"github.com/spf13/cobra"
 
 	"github.com/keyxmare/DevBootstrap/internal/app"
@@ -59,7 +61,59 @@ Applications disponibles:
 	},
 }
 
+// preCacheSudo asks for sudo password upfront on Linux systems
+func preCacheSudo(sysInfo *system.SystemInfo) {
+	// On macOS, Homebrew doesn't need sudo, so skip
+	if sysInfo.IsMacOS() {
+		return
+	}
+
+	// Skip if already root
+	if sysInfo.IsRoot {
+		return
+	}
+
+	// Skip in dry-run mode
+	if dryRun {
+		return
+	}
+
+	// Check if sudo is available
+	if _, err := exec.LookPath("sudo"); err != nil {
+		return
+	}
+
+	// Check if sudo credentials are already cached
+	checkCmd := exec.Command("sudo", "-n", "true")
+	if checkCmd.Run() == nil {
+		// Already authenticated
+		return
+	}
+
+	// Ask for password
+	infoStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#06B6D4"))
+	fmt.Println(infoStyle.Render("🔐 Certaines installations nécessitent les droits administrateur."))
+	fmt.Println()
+
+	// Run sudo -v to cache credentials (will prompt for password)
+	sudoCmd := exec.Command("sudo", "-v")
+	sudoCmd.Stdin = os.Stdin
+	sudoCmd.Stdout = os.Stdout
+	sudoCmd.Stderr = os.Stderr
+
+	if err := sudoCmd.Run(); err != nil {
+		errorStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#EF4444"))
+		fmt.Println(errorStyle.Render("⚠ Impossible d'obtenir les droits sudo. Certaines installations peuvent échouer."))
+		fmt.Println()
+	} else {
+		fmt.Println()
+	}
+}
+
 func runTUI(sysInfo *system.SystemInfo) {
+	// Pre-cache sudo credentials on Linux
+	preCacheSudo(sysInfo)
+
 	// Create components
 	cliUtil := cli.New(noInteraction, dryRun)
 	r := runner.New(cliUtil, dryRun)
