@@ -202,6 +202,7 @@ run_installer() {
 
     # Prefer Go binary
     if [ -f "$INSTALL_DIR/$BINARY_NAME" ]; then
+        chmod +x "$INSTALL_DIR/$BINARY_NAME" 2>/dev/null
         print_step "Lancement de DevBootstrap..."
         echo ""
         "./$BINARY_NAME" "${args[@]}"
