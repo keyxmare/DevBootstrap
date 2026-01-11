@@ -5,7 +5,7 @@ import subprocess
 import shutil
 from typing import Optional
 
-from .apps import AVAILABLE_APPS, AppInfo, AppStatus
+from .apps import AVAILABLE_APPS, AppInfo, AppStatus, AppTag
 
 
 class Colors:
@@ -83,6 +83,28 @@ class BootstrapApp:
         """Print an info message."""
         self.print(f"{Colors.CYAN}ℹ{Colors.RESET} {message}")
 
+    def format_tags(self, tags: list[AppTag]) -> str:
+        """Format tags for display with colors."""
+        if not tags:
+            return ""
+
+        # Color mapping for different tag types
+        tag_colors = {
+            AppTag.APP: Colors.BLUE,
+            AppTag.CONFIG: Colors.MAGENTA,
+            AppTag.ALIAS: Colors.CYAN,
+            AppTag.EDITOR: Colors.GREEN,
+            AppTag.SHELL: Colors.YELLOW,
+            AppTag.CONTAINER: Colors.RED,
+        }
+
+        formatted_tags = []
+        for tag in tags:
+            color = tag_colors.get(tag, Colors.DIM)
+            formatted_tags.append(f"{color}[{tag.value}]{Colors.RESET}")
+
+        return " ".join(formatted_tags)
+
     def check_app_status(self, app: AppInfo) -> tuple[AppStatus, Optional[str]]:
         """Check if an application is installed and get its version."""
         import os
@@ -142,7 +164,10 @@ class BootstrapApp:
                 status_icon = f"{Colors.YELLOW}○{Colors.RESET}"
                 status_text = f"{Colors.YELLOW}non installé{Colors.RESET}"
 
-            self.print(f"  {status_icon} {Colors.BOLD}{app.name}{Colors.RESET}")
+            # Format tags
+            tags_str = self.format_tags(app.tags)
+
+            self.print(f"  {status_icon} {Colors.BOLD}{app.name}{Colors.RESET} {tags_str}")
             self.print(f"      {Colors.DIM}{app.description}{Colors.RESET}")
             self.print(f"      Status: {status_text}")
             self.print()
@@ -210,7 +235,8 @@ class BootstrapApp:
                 marker = f"{Colors.GREEN}✓{Colors.RESET}"
                 status_hint = f" {Colors.DIM}(déjà installé){Colors.RESET}"
 
-            self.print(f"  [{i}] {marker} {app.name}{status_hint}")
+            tags_str = self.format_tags(app.tags)
+            self.print(f"  [{i}] {marker} {app.name} {tags_str}{status_hint}")
             selectable_apps.append(app)
 
         self.print()

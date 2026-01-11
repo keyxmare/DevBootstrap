@@ -1,7 +1,7 @@
 """Application registry for DevBootstrap."""
 
-from dataclasses import dataclass
-from typing import Callable, Optional
+from dataclasses import dataclass, field
+from typing import Optional
 from enum import Enum
 
 
@@ -10,6 +10,16 @@ class AppStatus(Enum):
     NOT_INSTALLED = "non installé"
     INSTALLED = "installé"
     UPDATE_AVAILABLE = "mise à jour disponible"
+
+
+class AppTag(Enum):
+    """Tags for categorizing applications."""
+    APP = "app"
+    CONFIG = "config"
+    ALIAS = "alias"
+    EDITOR = "editeur"
+    SHELL = "shell"
+    CONTAINER = "container"
 
 
 @dataclass
@@ -22,6 +32,7 @@ class AppInfo:
     version_command: Optional[str] = None  # Command to get version
     module: Optional[str] = None  # Python module to import for installation
     macos_app_paths: Optional[list[str]] = None  # macOS .app paths to check
+    tags: list[AppTag] = field(default_factory=list)  # Tags for categorization
 
 
 # Registry of all available applications
@@ -33,7 +44,8 @@ AVAILABLE_APPS = [
         check_command="docker",
         version_command="docker --version",
         module="docker_installer.app",
-        macos_app_paths=["/Applications/Docker.app"]
+        macos_app_paths=["/Applications/Docker.app"],
+        tags=[AppTag.APP, AppTag.CONTAINER]
     ),
     AppInfo(
         id="vscode",
@@ -42,7 +54,8 @@ AVAILABLE_APPS = [
         check_command="code",
         version_command="code --version | head -1",
         module="vscode_installer.app",
-        macos_app_paths=["/Applications/Visual Studio Code.app"]
+        macos_app_paths=["/Applications/Visual Studio Code.app"],
+        tags=[AppTag.APP, AppTag.EDITOR]
     ),
     AppInfo(
         id="neovim",
@@ -50,7 +63,8 @@ AVAILABLE_APPS = [
         description="Editeur de texte moderne (sans configuration)",
         check_command="nvim",
         version_command="nvim --version | head -1",
-        module="nvim_installer.app"
+        module="nvim_installer.app",
+        tags=[AppTag.APP, AppTag.EDITOR]
     ),
     AppInfo(
         id="neovim-config",
@@ -58,7 +72,8 @@ AVAILABLE_APPS = [
         description="Configuration et plugins pour Neovim (necessite Neovim)",
         check_command="nvim",
         version_command=None,
-        module="nvim_installer.app"
+        module="nvim_installer.app",
+        tags=[AppTag.CONFIG]
     ),
     AppInfo(
         id="zsh",
@@ -66,7 +81,8 @@ AVAILABLE_APPS = [
         description="Shell Z moderne (sans Oh My Zsh)",
         check_command="zsh",
         version_command="zsh --version | head -1",
-        module="zsh_installer.app"
+        module="zsh_installer.app",
+        tags=[AppTag.APP, AppTag.SHELL]
     ),
     AppInfo(
         id="oh-my-zsh",
@@ -74,7 +90,8 @@ AVAILABLE_APPS = [
         description="Framework de configuration pour Zsh avec plugins (necessite Zsh)",
         check_command="zsh",
         version_command=None,
-        module="zsh_installer.app"
+        module="zsh_installer.app",
+        tags=[AppTag.CONFIG]
     ),
     AppInfo(
         id="alias",
@@ -82,6 +99,7 @@ AVAILABLE_APPS = [
         description="Installe la commande 'devbootstrap' pour lancer l'installation",
         check_command="devbootstrap",
         version_command=None,
-        module="alias_installer.app"
+        module="alias_installer.app",
+        tags=[AppTag.ALIAS]
     ),
 ]
