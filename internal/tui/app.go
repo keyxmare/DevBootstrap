@@ -124,15 +124,21 @@ func (a *App) preCacheSudo() {
 // startSudoKeepAlive starts a goroutine that refreshes sudo every 10 seconds
 func (a *App) startSudoKeepAlive() {
 	sudoKeepAliveStop = make(chan struct{})
+	// Refresh immediately
+	cmd := exec.Command("sudo", "-v")
+	cmd.Stdin = os.Stdin
+	cmd.Run()
+
 	go func() {
-		// Refresh immediately, then every 10 seconds
 		ticker := time.NewTicker(10 * time.Second)
 		defer ticker.Stop()
 		for {
 			select {
 			case <-ticker.C:
-				// Refresh sudo timestamp silently
-				exec.Command("sudo", "-v").Run()
+				// Refresh sudo timestamp - needs stdin for TTY
+				cmd := exec.Command("sudo", "-v")
+				cmd.Stdin = os.Stdin
+				cmd.Run()
 			case <-sudoKeepAliveStop:
 				return
 			}
