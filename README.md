@@ -1,33 +1,95 @@
-# DebBootstrap
+# DevBootstrap
 
-Collection d'installateurs automatiques pour **macOS** (Apple Silicon M1/M2/M3 et Intel) et **Ubuntu/Debian**.
+Collection d'installateurs et désinstallateurs automatiques pour **macOS** (Apple Silicon M1/M2/M3 et Intel) et **Ubuntu/Debian**.
 
 ## Applications disponibles
 
-- **[Neovim Installer](#neovim-installer)** - Installation automatique de Neovim avec plugins
-- **[Docker Installer](#docker-installer)** - Installation automatique de Docker et Docker Compose
+- **[Neovim](#neovim)** - Editeur de texte moderne avec plugins
+- **[Docker](#docker)** - Plateforme de conteneurisation
+- **[VS Code](#vs-code)** - Editeur de code source
+- **[Zsh & Oh My Zsh](#zsh--oh-my-zsh)** - Shell moderne avec framework
+- **[Nerd Fonts](#nerd-fonts)** - Polices avec icônes pour terminal
+- **[Commande devbootstrap](#commande-devbootstrap)** - Alias global pour l'outil
 
 ---
-
-# Neovim Installer
-
-Installation automatique de Neovim avec toutes ses dépendances.
 
 ## Installation rapide
 
 ### Option 1: Script en une ligne
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/keyxmare/DebBootstrap/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/keyxmare/DevBootstrap/main/install.sh | bash
 ```
 
 ### Option 2: Clone et lancement
 
 ```bash
-git clone https://github.com/keyxmare/DebBootstrap.git
-cd DebBootstrap
-python3 install.py
+git clone https://github.com/keyxmare/DevBootstrap.git
+cd DevBootstrap
+python3 -m bootstrap
 ```
+
+---
+
+## Utilisation
+
+### Menu interactif
+
+Lancez simplement :
+
+```bash
+python3 -m bootstrap
+```
+
+Le menu vous permet de :
+1. **Installer** - Sélectionner les applications à installer
+2. **Désinstaller** - Supprimer les applications installées
+
+### Mode ligne de commande
+
+```bash
+# Installation (mode par défaut)
+python3 -m bootstrap
+
+# Désinstallation directe
+python3 -m bootstrap --uninstall
+
+# Mode simulation (sans changements)
+python3 -m bootstrap --dry-run
+
+# Mode non-interactif (installer tout)
+python3 -m bootstrap --no-interaction
+```
+
+---
+
+## Désinstallation
+
+DevBootstrap inclut des désinstallateurs complets pour toutes les applications. Ils permettent de :
+
+- Supprimer proprement les applications installées
+- Nettoyer les fichiers de configuration
+- Supprimer le cache et les données
+- Restaurer les paramètres par défaut
+
+### Via le menu interactif
+
+```bash
+python3 -m bootstrap
+# Puis choisir "2. Désinstaller"
+```
+
+### Via ligne de commande
+
+```bash
+python3 -m bootstrap --uninstall
+```
+
+---
+
+# Neovim
+
+Installation automatique de Neovim avec toutes ses dépendances.
 
 ## Fonctionnalités
 
@@ -82,27 +144,20 @@ python3 install.py
 | `gd` | Aller à la définition |
 | `K` | Documentation au survol |
 
+## Désinstallation Neovim
+
+La désinstallation de Neovim supprime :
+- Le binaire Neovim
+- La configuration (`~/.config/nvim`)
+- Les données (`~/.local/share/nvim`)
+- Le cache (`~/.cache/nvim`)
+- Les providers Python et Node.js
+
 ---
 
-# Docker Installer
+# Docker
 
 Installation automatique de Docker et Docker Compose.
-
-## Installation rapide
-
-### Option 1: Script en une ligne
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/keyxmare/DebBootstrap/main/install_docker.sh | bash
-```
-
-### Option 2: Clone et lancement
-
-```bash
-git clone https://github.com/keyxmare/DebBootstrap.git
-cd DebBootstrap
-python3 install_docker.py
-```
 
 ## Fonctionnalités
 
@@ -123,7 +178,7 @@ python3 install_docker.py
   - Docker CLI
   - Docker Compose
   - Docker BuildKit
-  - Kubernetes (optionnel, activable dans les préférences)
+  - Kubernetes (optionnel)
 
 ### Ubuntu/Debian
 - **Docker Engine** (depuis le repository officiel Docker)
@@ -133,18 +188,7 @@ python3 install_docker.py
   - docker-buildx-plugin
   - docker-compose-plugin
 
-## Systèmes supportés
-
-| OS | Architecture | Méthode d'installation |
-|----|--------------|----------------------|
-| macOS | Apple Silicon (M1/M2/M3) | Docker Desktop (Homebrew) |
-| macOS | Intel | Docker Desktop (Homebrew) |
-| Ubuntu 20.04+ | x86_64 | Repository officiel Docker |
-| Ubuntu 20.04+ | ARM64 | Repository officiel Docker |
-| Debian 11+ | x86_64 | Repository officiel Docker |
-| Debian 11+ | ARM64 | Repository officiel Docker |
-
-## Commandes utiles après installation
+## Commandes utiles
 
 ```bash
 # Vérifier l'installation
@@ -157,24 +201,121 @@ docker run hello-world
 # Lister les conteneurs
 docker ps
 
-# Lister les images
-docker images
-
-# Démarrer un projet avec docker-compose
+# Démarrer un projet
 docker compose up -d
-
-# Arrêter un projet
-docker compose down
 ```
 
-## Notes importantes (Linux)
+## Désinstallation Docker
 
-Après l'installation sur Linux, vous devez vous **déconnecter et reconnecter** pour utiliser Docker sans `sudo`.
+La désinstallation de Docker :
+- Arrête tous les conteneurs en cours
+- Supprime tous les conteneurs
+- Supprime toutes les images
+- Supprime les volumes (optionnel)
+- Désinstalle Docker via le gestionnaire de paquets
+- Supprime les données Docker (`/var/lib/docker`)
 
-Alternative rapide (sans déconnexion):
+---
+
+# VS Code
+
+Installation automatique de Visual Studio Code.
+
+## Fonctionnalités
+
+- **Multi-plateforme**: macOS et Ubuntu/Debian
+- **Extensions recommandées**: Python, ESLint, Prettier, etc.
+- **Configuration automatique**
+
+## Extensions disponibles
+
+| Extension | Description |
+|-----------|-------------|
+| Python | Support Python |
+| Prettier | Formatage de code |
+| ESLint | Linting JavaScript |
+| TypeScript | Support TypeScript |
+| Tailwind CSS | IntelliSense Tailwind |
+| GitLens | Intégration Git avancée |
+| Material Icon Theme | Icônes |
+
+## Désinstallation VS Code
+
+La désinstallation de VS Code supprime :
+- L'application VS Code
+- Les extensions (`~/.vscode/extensions`)
+- Les paramètres (`~/.config/Code` ou `~/Library/Application Support/Code`)
+- Le cache
+
+---
+
+# Zsh & Oh My Zsh
+
+Installation de Zsh et du framework Oh My Zsh.
+
+## Fonctionnalités
+
+- **Zsh**: Shell moderne
+- **Oh My Zsh**: Framework de configuration
+- **Plugins inclus**:
+  - zsh-autosuggestions
+  - zsh-syntax-highlighting
+  - zsh-completions
+- **Thèmes**: robbyrussell, agnoster, powerlevel10k
+
+## Désinstallation Zsh
+
+La désinstallation supprime :
+- Oh My Zsh (`~/.oh-my-zsh`)
+- Les plugins personnalisés
+- Le fichier `.zshrc`
+- L'historique et le cache Zsh
+- Restaure bash comme shell par défaut (optionnel)
+
+---
+
+# Nerd Fonts
+
+Installation de polices avec icônes pour terminal.
+
+## Polices disponibles
+
+| Police | Description |
+|--------|-------------|
+| MesloLG | Recommandée pour agnoster |
+| FiraCode | Avec ligatures |
+| JetBrains Mono | Police JetBrains |
+| Hack | Police Hack |
+
+## Désinstallation Nerd Fonts
+
+Supprime les polices Nerd Font installées et met à jour le cache.
+
+---
+
+# Commande devbootstrap
+
+Installe un alias global `devbootstrap` pour lancer l'outil depuis n'importe où.
+
+## Fonctionnalités
+
+- Script exécutable dans `~/.local/bin`
+- Alias/fonction dans les fichiers RC shell
+- Synchronisation automatique avec GitHub
+
+## Utilisation
+
 ```bash
-newgrp docker
+# Après installation, lancer depuis n'importe où
+devbootstrap
 ```
+
+## Désinstallation devbootstrap
+
+Supprime :
+- Le script `~/.local/bin/devbootstrap`
+- Les alias/fonctions des fichiers RC
+- Le répertoire `~/.devbootstrap`
 
 ---
 
@@ -185,58 +326,73 @@ newgrp docker
 - **Python 3.9+** (installé automatiquement si absent)
 - **Connexion internet** (pour télécharger les paquets)
 
+## Systèmes supportés
+
+| OS | Architecture | Support |
+|----|--------------|---------|
+| macOS | Apple Silicon (M1/M2/M3) | ✓ |
+| macOS | Intel | ✓ |
+| Ubuntu 20.04+ | x86_64 | ✓ |
+| Ubuntu 20.04+ | ARM64 | ✓ |
+| Debian 11+ | x86_64 | ✓ |
+| Debian 11+ | ARM64 | ✓ |
+
 ## Mode simulation (Dry Run)
 
 Pour tester sans effectuer de changements:
 
 ```bash
-# Neovim
-python3 install.py --dry-run
-
-# Docker
-python3 install_docker.py --dry-run
+python3 -m bootstrap --dry-run
 ```
 
 ## Structure du projet
 
 ```
-DebBootstrap/
-├── install.sh              # Script Neovim (bash)
+DevBootstrap/
+├── install.sh              # Script d'installation (bash)
 ├── install.py              # Point d'entrée Neovim
 ├── install_docker.sh       # Script Docker (bash)
 ├── install_docker.py       # Point d'entrée Docker
-├── nvim_installer/         # Package Neovim
-│   ├── app.py
-│   ├── config_manager.py
+├── bootstrap/              # Menu principal
+│   ├── app.py             # Application principale
+│   └── apps.py            # Registre des applications
+├── nvim_installer/         # Installateur/Désinstallateur Neovim
 │   ├── installers/
-│   │   ├── base.py
-│   │   ├── macos.py
-│   │   └── ubuntu.py
-│   └── utils/
-│       ├── cli.py
-│       ├── runner.py
-│       └── system.py
-└── docker_installer/       # Package Docker
+│   └── uninstallers/
+├── docker_installer/       # Installateur/Désinstallateur Docker
+│   ├── installers/
+│   └── uninstallers/
+├── vscode_installer/       # Installateur/Désinstallateur VS Code
+│   ├── installers/
+│   └── uninstallers/
+├── zsh_installer/          # Installateur/Désinstallateur Zsh
+│   ├── installers/
+│   └── uninstallers/
+├── font_installer/         # Installateur/Désinstallateur Fonts
+│   ├── installers/
+│   └── uninstallers/
+└── alias_installer/        # Installateur/Désinstallateur Alias
     ├── app.py
-    ├── installers/
-    │   ├── base.py
-    │   ├── macos.py
-    │   └── ubuntu.py
-    └── utils/
-        ├── cli.py
-        ├── runner.py
-        └── system.py
+    └── uninstaller.py
 ```
 
 ## Développement
 
-### Ajouter un nouvel OS
+### Ajouter un nouvel installateur
+
+1. Créer un nouveau package dans le répertoire racine
+2. Implémenter les classes dans `installers/` (hériter de BaseInstaller)
+3. Implémenter les classes dans `uninstallers/` (hériter de BaseUninstaller)
+4. Ajouter l'application dans `bootstrap/apps.py`
+5. Intégrer dans `bootstrap/app.py`
+
+### Ajouter un nouveau système d'exploitation
 
 1. Créer une nouvelle classe dans `<package>/installers/`
 2. Hériter de `BaseInstaller`
 3. Implémenter les méthodes abstraites
-4. Ajouter la détection dans `utils/system.py`
-5. Ajouter l'instanciation dans `app.py`
+4. Faire de même pour `<package>/uninstallers/`
+5. Ajouter la détection dans `utils/system.py`
 
 ## Licence
 
