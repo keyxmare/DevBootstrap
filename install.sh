@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# DevBootstrap - Script de lancement unifié
+# DevBootstrap - Script de lancement unifie
 # Usage: curl -fsSL <url>/install.sh | bash
 #    or: ./install.sh
 #    or: ./install.sh --no-interaction
@@ -20,10 +20,11 @@ RESET='\033[0m'
 # Configuration
 REPO_URL="https://github.com/keyxmare/DevBootstrap"
 INSTALL_DIR="${HOME}/.devbootstrap"
+BINARY_NAME="devbootstrap"
 
 # Global variables
-PYTHON_CMD=""
 NO_INTERACTION=false
+BOOTSTRAP_ARGS=()
 
 # Parse command line arguments
 parse_args() {
@@ -38,23 +39,22 @@ parse_args() {
                 shift
                 ;;
             -*)
-                print_error "Option inconnue: $1"
-                show_help
-                exit 1
+                # Pass remaining arguments to devbootstrap
+                BOOTSTRAP_ARGS+=("$1")
+                shift
                 ;;
             *)
-                # Pass remaining arguments to bootstrap
-                break
+                # Pass remaining arguments to devbootstrap
+                BOOTSTRAP_ARGS+=("$1")
+                shift
                 ;;
         esac
     done
-    # Store remaining args for bootstrap
-    BOOTSTRAP_ARGS=("$@")
 }
 
 show_help() {
     echo ""
-    echo -e "${BOLD}DevBootstrap${RESET} - Installation automatique de l'environnement de développement"
+    echo -e "${BOLD}DevBootstrap${RESET} - Installation automatique de l'environnement de developpement"
     echo ""
     echo -e "${BOLD}Usage:${RESET}"
     echo "  curl -fsSL https://raw.githubusercontent.com/keyxmare/DevBootstrap/main/install.sh | bash"
@@ -63,35 +63,37 @@ show_help() {
     echo -e "${BOLD}Options:${RESET}"
     echo "  -h, --help            Affiche ce message d'aide"
     echo "  -n, --no-interaction  Mode non-interactif (installe tout sans confirmation)"
+    echo "  -u, --uninstall       Mode desinstallation"
+    echo "  --dry-run             Simuler sans effectuer de changements"
     echo ""
     echo -e "${BOLD}Exemples:${RESET}"
-    echo "  ./install.sh                      # Mode interactif (par défaut)"
+    echo "  ./install.sh                      # Mode interactif (par defaut)"
     echo "  ./install.sh --no-interaction     # Installe tout automatiquement"
     echo "  ./install.sh -n                   # Raccourci pour --no-interaction"
     echo ""
 }
 
 print_banner() {
-    echo -e "${CYAN}${BOLD}╔══════════════════════════════════════════════════════════════╗${RESET}"
-    echo -e "${CYAN}${BOLD}║${RESET}           DevBootstrap - Installation automatique           ${CYAN}${BOLD}║${RESET}"
-    echo -e "${CYAN}${BOLD}╚══════════════════════════════════════════════════════════════╝${RESET}"
+    echo -e "${CYAN}${BOLD}+==============================================================+${RESET}"
+    echo -e "${CYAN}${BOLD}|${RESET}           DevBootstrap - Installation automatique           ${CYAN}${BOLD}|${RESET}"
+    echo -e "${CYAN}${BOLD}+==============================================================+${RESET}"
     echo ""
 }
 
 print_step() {
-    echo -e "${BLUE}▶${RESET} $1"
+    echo -e "${BLUE}>${RESET} $1"
 }
 
 print_success() {
-    echo -e "${GREEN}✓${RESET} $1"
+    echo -e "${GREEN}[OK]${RESET} $1"
 }
 
 print_error() {
-    echo -e "${RED}✗${RESET} $1"
+    echo -e "${RED}[X]${RESET} $1"
 }
 
 print_warning() {
-    echo -e "${YELLOW}⚠${RESET} $1"
+    echo -e "${YELLOW}[!]${RESET} $1"
 }
 
 detect_os() {
@@ -120,126 +122,102 @@ detect_os() {
     esac
 }
 
-check_python() {
-    # Check for Python 3.9+ and set PYTHON_CMD global variable
-    if command -v python3 &> /dev/null; then
-        local version
-        version=$(python3 -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')
-        local major minor
-        major=$(echo "$version" | cut -d. -f1)
-        minor=$(echo "$version" | cut -d. -f2)
+detect_arch() {
+    case "$(uname -m)" in
+        arm64|aarch64)
+            echo "arm64"
+            ;;
+        x86_64|amd64)
+            echo "amd64"
+            ;;
+        *)
+            echo "unknown"
+            ;;
+    esac
+}
 
-        if [ "$major" -ge 3 ] && [ "$minor" -ge 9 ]; then
-            PYTHON_CMD="python3"
-            return 0
-        fi
+check_go_binary() {
+    # Check if we have a pre-built Go binary
+    if [ -f "$INSTALL_DIR/$BINARY_NAME" ]; then
+        return 0
     fi
     return 1
 }
 
-install_python_macos() {
-    print_step "Installation de Python via Homebrew..."
+download_or_build() {
+    print_step "Synchronisation de DevBootstrap..."
 
-    # Check if Homebrew is installed
-    if ! command -v brew &> /dev/null; then
-        print_step "Installation de Homebrew..."
-        /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-
-        # Add Homebrew to PATH for Apple Silicon
-        if [ -f "/opt/homebrew/bin/brew" ]; then
-            eval "$(/opt/homebrew/bin/brew shellenv)"
-        fi
-    fi
-
-    brew install python@3.12
-}
-
-install_python_ubuntu() {
-    print_step "Installation de Python..."
-    sudo apt-get update
-    sudo apt-get install -y python3 python3-pip python3-venv
-}
-
-ensure_python() {
-    if check_python; then
-        print_success "Python trouvé: $($PYTHON_CMD --version 2>&1)"
-        return 0
-    fi
-
-    print_warning "Python 3.9+ non trouvé"
-
-    local os_type
-    os_type=$(detect_os)
-    case "$os_type" in
-        macos)
-            install_python_macos
-            ;;
-        ubuntu)
-            install_python_ubuntu
-            ;;
-        *)
-            print_error "Veuillez installer Python 3.9+ manuellement"
-            exit 1
-            ;;
-    esac
-
-    if ! check_python; then
-        print_error "Impossible d'installer Python"
-        exit 1
-    fi
-
-    print_success "Python installé: $($PYTHON_CMD --version 2>&1)"
-}
-
-download_installer() {
-    # Sync silently - don't show git output
+    # Sync repository
     if command -v git &> /dev/null; then
         if [ -d "$INSTALL_DIR/.git" ]; then
             # Update existing repo silently
             (cd "$INSTALL_DIR" && git fetch origin main --quiet 2>/dev/null && git reset --hard origin/main --quiet 2>/dev/null) || true
         else
-            # Clone silently
+            # Clone repository
             rm -rf "$INSTALL_DIR" 2>/dev/null || true
-            git clone --depth=1 --quiet "$REPO_URL" "$INSTALL_DIR" 2>/dev/null || true
+            git clone --depth=1 --quiet "$REPO_URL" "$INSTALL_DIR" 2>/dev/null || {
+                print_step "Telechargement de DevBootstrap..."
+                git clone --depth=1 "$REPO_URL" "$INSTALL_DIR"
+            }
         fi
+    else
+        print_error "git est requis pour installer DevBootstrap"
+        exit 1
     fi
 
-    # Check if we have a valid installation, if not try again with output
-    if [ ! -d "$INSTALL_DIR" ] || [ ! -f "$INSTALL_DIR/bootstrap/__main__.py" ]; then
-        print_step "Téléchargement de DevBootstrap..."
-
-        if command -v git &> /dev/null; then
-            rm -rf "$INSTALL_DIR" 2>/dev/null || true
-            git clone --depth=1 --quiet "$REPO_URL" "$INSTALL_DIR"
-        else
-            # Download as zip if git not available
-            local temp_zip="/tmp/devbootstrap.zip"
-            curl -fsSL "${REPO_URL}/archive/refs/heads/main.zip" -o "$temp_zip"
-            rm -rf "$INSTALL_DIR"
-            unzip -q "$temp_zip" -d /tmp
-            mv /tmp/DevBootstrap-main "$INSTALL_DIR"
-            rm "$temp_zip"
-        fi
-
-        print_success "DevBootstrap téléchargé"
+    # Check if Go binary exists
+    if check_go_binary; then
+        print_success "DevBootstrap pret (binaire Go)"
+        return 0
     fi
+
+    # Check if we can build from source
+    if command -v go &> /dev/null && [ -f "$INSTALL_DIR/go.mod" ]; then
+        print_step "Compilation de DevBootstrap..."
+        (cd "$INSTALL_DIR" && go build -o "$BINARY_NAME" .) && {
+            print_success "DevBootstrap compile"
+            return 0
+        }
+    fi
+
+    # Fallback to Python if available
+    if command -v python3 &> /dev/null && [ -f "$INSTALL_DIR/bootstrap/__main__.py" ]; then
+        print_warning "Binaire Go non disponible, utilisation de la version Python"
+        return 1
+    fi
+
+    print_error "Impossible d'installer DevBootstrap (Go ou Python requis)"
+    exit 1
 }
 
 run_installer() {
-    print_step "Lancement du menu d'installation..."
-    echo ""
-
     cd "$INSTALL_DIR"
 
-    # Build arguments for bootstrap
+    # Build arguments
     local args=()
     if [ "$NO_INTERACTION" = true ]; then
         args+=("--no-interaction")
     fi
     args+=("${BOOTSTRAP_ARGS[@]}")
 
-    # Run the unified Python installer (bootstrap module)
-    "$PYTHON_CMD" -m bootstrap "${args[@]}"
+    # Prefer Go binary
+    if [ -f "$INSTALL_DIR/$BINARY_NAME" ]; then
+        print_step "Lancement de DevBootstrap..."
+        echo ""
+        "./$BINARY_NAME" "${args[@]}"
+        return $?
+    fi
+
+    # Fallback to Python
+    if command -v python3 &> /dev/null && [ -f "$INSTALL_DIR/bootstrap/__main__.py" ]; then
+        print_step "Lancement de DevBootstrap (Python)..."
+        echo ""
+        python3 -m bootstrap "${args[@]}"
+        return $?
+    fi
+
+    print_error "Aucune version executable trouvee"
+    exit 1
 }
 
 main() {
@@ -249,22 +227,29 @@ main() {
     echo ""
     print_banner
 
-    # Detect OS
-    local os_type
-    os_type=$(detect_os)
-    print_step "Système détecté: $os_type"
-
-    if [ "$os_type" = "unsupported" ]; then
-        print_error "Système non supporté"
-        print_warning "Systèmes supportés: macOS, Ubuntu, Debian"
+    # Check for root on macOS
+    if [[ "$OSTYPE" == "darwin"* ]] && [[ $EUID -eq 0 ]]; then
+        print_error "Ne pas executer ce script avec sudo sur macOS."
+        print_error "Homebrew ne fonctionne pas correctement en root."
+        echo ""
+        print_step "Utilisez simplement: ./install.sh"
         exit 1
     fi
 
-    # Ensure Python is available (sets PYTHON_CMD global)
-    ensure_python
+    # Detect OS and architecture
+    local os_type arch
+    os_type=$(detect_os)
+    arch=$(detect_arch)
+    print_step "Systeme detecte: $os_type ($arch)"
 
-    # Download/update installer (silent sync)
-    download_installer
+    if [ "$os_type" = "unsupported" ]; then
+        print_error "Systeme non supporte"
+        print_warning "Systemes supportes: macOS, Ubuntu, Debian"
+        exit 1
+    fi
+
+    # Download/update and build if needed
+    download_or_build
 
     # Run the installer
     run_installer
