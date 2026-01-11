@@ -19,7 +19,7 @@ RESET='\033[0m'
 # Configuration
 REPO_URL="https://github.com/keyxmare/DevBootstrap"
 CACHE_DIR="${HOME}/.devbootstrap"
-BIN_DIR="${HOME}/.local/bin"
+BIN_DIR="/usr/local/bin"
 BINARY_NAME="devbootstrap"
 
 # Global variables
@@ -123,6 +123,25 @@ detect_arch() {
     esac
 }
 
+install_binary() {
+    local source_path="$1"
+    local dest_path="$BIN_DIR/$BINARY_NAME"
+
+    chmod +x "$source_path"
+
+    # Try without sudo first, then with sudo if needed
+    if cp -f "$source_path" "$dest_path" 2>/dev/null; then
+        return 0
+    elif sudo cp -f "$source_path" "$dest_path" 2>/dev/null; then
+        sudo chmod +x "$dest_path"
+        return 0
+    else
+        print_error "Impossible de copier le binaire dans $BIN_DIR"
+        print_warning "Essayez: sudo cp $source_path $dest_path"
+        return 1
+    fi
+}
+
 download_or_build() {
     local is_update=false
 
@@ -134,9 +153,13 @@ download_or_build() {
         print_step "Installation de DevBootstrap..."
     fi
 
-    # Create directories
+    # Create cache directory
     mkdir -p "$CACHE_DIR"
-    mkdir -p "$BIN_DIR"
+
+    # Ensure /usr/local/bin exists
+    if [ ! -d "$BIN_DIR" ]; then
+        sudo mkdir -p "$BIN_DIR" 2>/dev/null || mkdir -p "$BIN_DIR"
+    fi
 
     # Sync repository (always fetch latest)
     if command -v git &> /dev/null; then
@@ -158,28 +181,30 @@ download_or_build() {
 
     # Check if Go binary exists in repo
     if [ -f "$CACHE_DIR/$BINARY_NAME" ]; then
-        chmod +x "$CACHE_DIR/$BINARY_NAME"
-        cp -f "$CACHE_DIR/$BINARY_NAME" "$BIN_DIR/$BINARY_NAME"
-        if [ "$is_update" = true ]; then
-            print_success "DevBootstrap mis a jour"
-        else
-            print_success "DevBootstrap installe"
+        if install_binary "$CACHE_DIR/$BINARY_NAME"; then
+            if [ "$is_update" = true ]; then
+                print_success "DevBootstrap mis a jour"
+            else
+                print_success "DevBootstrap installe"
+            fi
+            return 0
         fi
-        return 0
+        return 1
     fi
 
     # Build from source if Go is available
     if command -v go &> /dev/null && [ -f "$CACHE_DIR/go.mod" ]; then
         print_step "Compilation de DevBootstrap..."
         (cd "$CACHE_DIR" && go build -o "$BINARY_NAME" .) && {
-            cp -f "$CACHE_DIR/$BINARY_NAME" "$BIN_DIR/$BINARY_NAME"
-            chmod +x "$BIN_DIR/$BINARY_NAME"
-            if [ "$is_update" = true ]; then
-                print_success "DevBootstrap compile et mis a jour"
-            else
-                print_success "DevBootstrap compile et installe"
+            if install_binary "$CACHE_DIR/$BINARY_NAME"; then
+                if [ "$is_update" = true ]; then
+                    print_success "DevBootstrap compile et mis a jour"
+                else
+                    print_success "DevBootstrap compile et installe"
+                fi
+                return 0
             fi
-            return 0
+            return 1
         }
     fi
 
@@ -188,20 +213,21 @@ download_or_build() {
 }
 
 configure_path() {
-    # Check if ~/.local/bin is already in PATH
-    if echo "$PATH" | grep -q "$HOME/.local/bin"; then
+    # /usr/local/bin is typically already in PATH on macOS and most Linux systems
+    # Only configure if needed
+    if echo "$PATH" | grep -q "/usr/local/bin"; then
         return 0
     fi
 
     print_step "Configuration du PATH..."
 
-    local path_line='export PATH="$HOME/.local/bin:$PATH"'
+    local path_line='export PATH="/usr/local/bin:$PATH"'
     local configured=false
 
     # Add to .zshrc if using zsh
     if [ -n "$ZSH_VERSION" ] || [ "$SHELL" = "/bin/zsh" ] || [ -f "$HOME/.zshrc" ]; then
         if [ -f "$HOME/.zshrc" ]; then
-            if ! grep -q ".local/bin" "$HOME/.zshrc" 2>/dev/null; then
+            if ! grep -q "/usr/local/bin" "$HOME/.zshrc" 2>/dev/null; then
                 echo "" >> "$HOME/.zshrc"
                 echo "# Added by DevBootstrap" >> "$HOME/.zshrc"
                 echo "$path_line" >> "$HOME/.zshrc"
@@ -212,14 +238,14 @@ configure_path() {
 
     # Add to .bashrc or .bash_profile
     if [ -f "$HOME/.bashrc" ]; then
-        if ! grep -q ".local/bin" "$HOME/.bashrc" 2>/dev/null; then
+        if ! grep -q "/usr/local/bin" "$HOME/.bashrc" 2>/dev/null; then
             echo "" >> "$HOME/.bashrc"
             echo "# Added by DevBootstrap" >> "$HOME/.bashrc"
             echo "$path_line" >> "$HOME/.bashrc"
             configured=true
         fi
     elif [ -f "$HOME/.bash_profile" ]; then
-        if ! grep -q ".local/bin" "$HOME/.bash_profile" 2>/dev/null; then
+        if ! grep -q "/usr/local/bin" "$HOME/.bash_profile" 2>/dev/null; then
             echo "" >> "$HOME/.bash_profile"
             echo "# Added by DevBootstrap" >> "$HOME/.bash_profile"
             echo "$path_line" >> "$HOME/.bash_profile"
@@ -237,20 +263,12 @@ show_next_steps() {
     echo ""
     if [ "$is_update" = true ]; then
         echo -e "${CYAN}${BOLD}Mise a jour terminee!${RESET}"
-        echo ""
-        echo -e "Lancez DevBootstrap:"
-        echo -e "     ${GREEN}devbootstrap${RESET}"
     else
         echo -e "${CYAN}${BOLD}Installation terminee!${RESET}"
-        echo ""
-        echo -e "${BOLD}Prochaines etapes:${RESET}"
-        echo ""
-        echo "  1. Redemarrez votre terminal ou executez:"
-        echo -e "     ${GREEN}source ~/.zshrc${RESET}  # ou ~/.bashrc"
-        echo ""
-        echo "  2. Lancez DevBootstrap:"
-        echo -e "     ${GREEN}devbootstrap${RESET}"
     fi
+    echo ""
+    echo -e "Lancez DevBootstrap:"
+    echo -e "     ${GREEN}devbootstrap${RESET}"
     echo ""
 }
 
