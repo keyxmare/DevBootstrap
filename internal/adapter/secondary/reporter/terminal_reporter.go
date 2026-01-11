@@ -8,67 +8,56 @@ import (
 	"time"
 
 	"github.com/fatih/color"
+	"golang.org/x/term"
 )
 
-// Terminal formatting icons (Nerd Font compatible)
+// Soft minimal design constants
 const (
-	IconSuccess  = ""
-	IconError    = ""
-	IconWarning  = ""
-	IconInfo     = ""
-	IconArrow    = ""
-	IconPackage  = ""
-	IconCheck    = ""
-	IconCross    = ""
-	IconCircle   = ""
-	IconDot      = ""
-	IconRocket   = ""
-	IconGear     = ""
-	IconFolder   = ""
-	IconTerminal = ""
-	IconDocker   = ""
-	IconCode     = ""
+	minWidth     = 60
+	maxWidth     = 100
+	paddingRatio = 0.15 // 15% padding on each side
 )
 
-// Color palettes - Modern dark theme
+// Soft minimal icons (simple, clean)
+const (
+	IconCheck   = "●"
+	IconEmpty   = "○"
+	IconArrow   = "→"
+	IconDot     = "·"
+	IconSuccess = "✓"
+	IconError   = "✕"
+	IconWarning = "!"
+	IconInfo    = "i"
+)
+
+// Soft minimal color palette - muted, elegant colors
 var (
-	// Primary colors
-	primaryColor   = color.New(color.FgHiCyan)
-	secondaryColor = color.New(color.FgHiMagenta)
-	accentColor    = color.New(color.FgHiYellow)
+	// Primary accent - soft cyan/teal
+	accent = color.New(color.FgCyan)
 
-	// Status colors
-	successColor = color.New(color.FgHiGreen)
-	errorColor   = color.New(color.FgHiRed)
-	warningColor = color.New(color.FgHiYellow)
-	infoColor    = color.New(color.FgHiBlue)
+	// Text hierarchy
+	textPrimary   = color.New(color.FgHiWhite)
+	textSecondary = color.New(color.FgWhite)
+	textMuted     = color.New(color.Faint)
+	textDim       = color.New(color.FgHiBlack)
 
-	// Text styles
-	dimColor      = color.New(color.Faint)
-	boldColor     = color.New(color.Bold)
-	boldWhite     = color.New(color.FgHiWhite, color.Bold)
-	boldCyan      = color.New(color.FgHiCyan, color.Bold)
-	boldMagenta   = color.New(color.FgHiMagenta, color.Bold)
-	boldGreen     = color.New(color.FgHiGreen, color.Bold)
-	boldYellow    = color.New(color.FgHiYellow, color.Bold)
-	boldRed       = color.New(color.FgHiRed, color.Bold)
-	italicDim     = color.New(color.Faint, color.Italic)
+	// Status colors - softer versions
+	statusSuccess = color.New(color.FgGreen)
+	statusError   = color.New(color.FgRed)
+	statusWarning = color.New(color.FgYellow)
+	statusInfo    = color.New(color.FgBlue)
 
-	// Gradient-like effects
-	gradientStart = color.New(color.FgHiCyan)
-	gradientMid   = color.New(color.FgHiBlue)
-	gradientEnd   = color.New(color.FgHiMagenta)
-
-	// Background badges
-	successBadge = color.New(color.BgGreen, color.FgHiWhite, color.Bold)
-	errorBadge   = color.New(color.BgRed, color.FgHiWhite, color.Bold)
-	warningBadge = color.New(color.BgYellow, color.FgBlack, color.Bold)
-	infoBadge    = color.New(color.BgBlue, color.FgHiWhite, color.Bold)
+	// Decorative
+	borderColor = color.New(color.FgHiBlack)
+	labelColor  = color.New(color.FgCyan, color.Faint)
 )
 
 // TerminalReporter implements ProgressReporter for terminal output.
 type TerminalReporter struct {
 	dryRun        bool
+	width         int
+	contentWidth  int
+	leftPadding   int
 	spinnerActive bool
 	spinnerStop   chan bool
 }
@@ -76,9 +65,36 @@ type TerminalReporter struct {
 // NewTerminalReporter creates a new TerminalReporter instance.
 func NewTerminalReporter(dryRun bool) *TerminalReporter {
 	initColors()
-	return &TerminalReporter{
+	r := &TerminalReporter{
 		dryRun:      dryRun,
 		spinnerStop: make(chan bool),
+	}
+	r.calculateDimensions()
+	return r
+}
+
+// calculateDimensions calculates the layout dimensions based on terminal size.
+func (r *TerminalReporter) calculateDimensions() {
+	width, _, err := term.GetSize(int(os.Stdout.Fd()))
+	if err != nil || width < minWidth {
+		width = 80
+	}
+
+	r.width = width
+
+	// Calculate content width (max 100 chars, with padding)
+	r.contentWidth = width - int(float64(width)*paddingRatio*2)
+	if r.contentWidth > maxWidth {
+		r.contentWidth = maxWidth
+	}
+	if r.contentWidth < minWidth {
+		r.contentWidth = minWidth
+	}
+
+	// Calculate left padding to center content
+	r.leftPadding = (width - r.contentWidth) / 2
+	if r.leftPadding < 2 {
+		r.leftPadding = 2
 	}
 }
 
@@ -94,134 +110,128 @@ func initColors() {
 	}
 }
 
+// pad returns the left padding string.
+func (r *TerminalReporter) pad() string {
+	return strings.Repeat(" ", r.leftPadding)
+}
+
+// line creates a line of specific width with a character.
+func (r *TerminalReporter) line(char string) string {
+	return strings.Repeat(char, r.contentWidth)
+}
+
+// center centers text within the content width.
+func (r *TerminalReporter) center(text string) string {
+	textLen := len([]rune(text))
+	if textLen >= r.contentWidth {
+		return text
+	}
+	leftPad := (r.contentWidth - textLen) / 2
+	return strings.Repeat(" ", leftPad) + text
+}
+
+// Header prints a clean, minimal header.
+func (r *TerminalReporter) Header(title string) {
+	// Clear screen effect - just add spacing
+	fmt.Println()
+	fmt.Println()
+
+	// Subtle top border
+	fmt.Print(r.pad())
+	textDim.Println(r.line("─"))
+
+	// Empty line
+	fmt.Println()
+
+	// Title centered
+	fmt.Print(r.pad())
+	textPrimary.Println(r.center(title))
+
+	// Subtitle
+	fmt.Print(r.pad())
+	textMuted.Println(r.center("Configuration de votre environnement de développement"))
+
+	// Empty line
+	fmt.Println()
+
+	// Subtle bottom border
+	fmt.Print(r.pad())
+	textDim.Println(r.line("─"))
+
+	fmt.Println()
+}
+
+// Section starts a new section with minimal styling.
+func (r *TerminalReporter) Section(title string) {
+	fmt.Println()
+	fmt.Print(r.pad())
+	accent.Print("  ")
+	textPrimary.Println(title)
+	fmt.Print(r.pad())
+	textDim.Println("  " + strings.Repeat("─", len(title)+4))
+}
+
 // Info reports an informational message.
 func (r *TerminalReporter) Info(message string) {
-	infoColor.Printf(" %s ", IconInfo)
-	fmt.Println(message)
+	fmt.Print(r.pad())
+	textDim.Print("  ")
+	statusInfo.Print(IconInfo)
+	textDim.Print("  ")
+	textSecondary.Println(message)
 }
 
 // Success reports a success message.
 func (r *TerminalReporter) Success(message string) {
-	successColor.Printf(" %s ", IconSuccess)
-	boldWhite.Println(message)
+	fmt.Print(r.pad())
+	textDim.Print("  ")
+	statusSuccess.Print(IconSuccess)
+	textDim.Print("  ")
+	textPrimary.Println(message)
 }
 
 // Warning reports a warning message.
 func (r *TerminalReporter) Warning(message string) {
-	warningColor.Printf(" %s ", IconWarning)
-	boldYellow.Println(message)
+	fmt.Print(r.pad())
+	textDim.Print("  ")
+	statusWarning.Print(IconWarning)
+	textDim.Print("  ")
+	statusWarning.Println(message)
 }
 
 // Error reports an error message.
 func (r *TerminalReporter) Error(message string) {
-	errorColor.Printf(" %s ", IconError)
-	boldRed.Println(message)
+	fmt.Print(r.pad())
+	textDim.Print("  ")
+	statusError.Print(IconError)
+	textDim.Print("  ")
+	statusError.Println(message)
 }
 
-// Progress reports a progress message with spinner animation.
+// Progress reports a progress message.
 func (r *TerminalReporter) Progress(message string) {
 	r.ClearProgress()
-	dimColor.Printf("   %s %s...", IconGear, message)
+	fmt.Print(r.pad())
+	textMuted.Printf("  %s  %s...", IconDot, message)
 }
 
 // ClearProgress clears any progress indicator.
 func (r *TerminalReporter) ClearProgress() {
-	fmt.Printf("\r%s\r", strings.Repeat(" ", 100))
-}
-
-// Section starts a new section with a styled header.
-func (r *TerminalReporter) Section(title string) {
-	fmt.Println()
-
-	// Modern section header with gradient effect
-	gradientStart.Print(" ┌")
-	gradientMid.Print("─")
-	gradientEnd.Print("─")
-	boldCyan.Printf(" %s ", IconArrow)
-	boldWhite.Print(title)
-	fmt.Println()
-
-	// Underline with gradient
-	dimColor.Print(" │")
-	fmt.Println()
+	fmt.Printf("\r%s\r", strings.Repeat(" ", r.width))
 }
 
 // Step reports a step in a multi-step process.
 func (r *TerminalReporter) Step(current, total int, message string) {
-	progressBar := r.miniProgressBar(current, total)
-	primaryColor.Printf(" %s ", progressBar)
-	boldWhite.Printf("[%d/%d] ", current, total)
-	fmt.Println(message)
+	fmt.Print(r.pad())
+	textMuted.Print("  ")
+	accent.Printf("[%d/%d]", current, total)
+	textMuted.Print("  ")
+	textSecondary.Println(message)
 }
 
-// miniProgressBar creates a small visual progress indicator.
-func (r *TerminalReporter) miniProgressBar(current, total int) string {
-	filled := (current * 5) / total
-	bar := strings.Repeat("█", filled) + strings.Repeat("░", 5-filled)
-	return bar
-}
-
-// Header prints a modern ASCII art banner.
-func (r *TerminalReporter) Header(title string) {
-	fmt.Println()
-
-	// Modern box with double lines and colors
-	width := 62
-
-	// Top border
-	gradientStart.Print("  ╔")
-	for i := 0; i < width; i++ {
-		if i < width/3 {
-			gradientStart.Print("═")
-		} else if i < 2*width/3 {
-			gradientMid.Print("═")
-		} else {
-			gradientEnd.Print("═")
-		}
-	}
-	gradientEnd.Println("╗")
-
-	// Empty line
-	gradientStart.Print("  ║")
-	fmt.Print(strings.Repeat(" ", width))
-	gradientEnd.Println("║")
-
-	// Title line with rocket icon
-	gradientStart.Print("  ║")
-	titleWithIcon := fmt.Sprintf(" %s  %s", IconRocket, title)
-	padding := width - len([]rune(titleWithIcon))
-	leftPad := padding / 2
-	rightPad := padding - leftPad
-	fmt.Print(strings.Repeat(" ", leftPad))
-	accentColor.Print(IconRocket)
-	boldWhite.Printf("  %s", title)
-	fmt.Print(strings.Repeat(" ", rightPad))
-	gradientEnd.Println("║")
-
-	// Empty line
-	gradientStart.Print("  ║")
-	fmt.Print(strings.Repeat(" ", width))
-	gradientEnd.Println("║")
-
-	// Bottom border
-	gradientStart.Print("  ╚")
-	for i := 0; i < width; i++ {
-		if i < width/3 {
-			gradientStart.Print("═")
-		} else if i < 2*width/3 {
-			gradientMid.Print("═")
-		} else {
-			gradientEnd.Print("═")
-		}
-	}
-	gradientEnd.Println("╝")
-
-	fmt.Println()
-}
-
-// Summary prints a key-value summary with modern styling.
+// Summary prints a key-value summary with clean layout.
 func (r *TerminalReporter) Summary(title string, items map[string]string) {
 	r.Section(title)
+	fmt.Println()
 
 	// Find max key length for alignment
 	maxLen := 0
@@ -232,120 +242,99 @@ func (r *TerminalReporter) Summary(title string, items map[string]string) {
 	}
 
 	for key, value := range items {
-		dimColor.Print(" │  ")
-		secondaryColor.Printf("%-*s", maxLen, key)
-		dimColor.Print("  →  ")
-		boldWhite.Println(value)
+		fmt.Print(r.pad())
+		textMuted.Print("      ")
+		labelColor.Printf("%-*s", maxLen, key)
+		textDim.Print("  ")
+		textSecondary.Println(value)
 	}
-
-	dimColor.Println(" │")
 }
 
-// AppCard displays an application with modern card styling.
-func (r *TerminalReporter) AppCard(name, description, status string, installed bool, version string) {
-	// Card border
-	dimColor.Print(" ┌")
-	dimColor.Println(strings.Repeat("─", 58) + "┐")
+// AppItem displays an application in a clean list format.
+func (r *TerminalReporter) AppItem(name, description string, installed bool, version string) {
+	fmt.Print(r.pad())
 
-	// App name with icon and status badge
-	dimColor.Print(" │ ")
 	if installed {
-		successColor.Printf("%s ", IconCheck)
-		boldGreen.Printf("%-20s", name)
-		successBadge.Print(" INSTALLED ")
-	} else {
-		dimColor.Printf("%s ", IconCircle)
-		boldWhite.Printf("%-20s", name)
-		dimColor.Print(" NOT INSTALLED ")
-	}
-
-	// Version if available
-	if version != "" && installed {
-		dimColor.Print(" ")
-		italicDim.Printf("v%s", truncateVersion(version))
-	}
-	fmt.Println()
-
-	// Description
-	dimColor.Print(" │   ")
-	dimColor.Println(description)
-
-	// Bottom border
-	dimColor.Print(" └")
-	dimColor.Println(strings.Repeat("─", 58) + "┘")
-}
-
-// AppListItem displays an application as a list item (more compact).
-func (r *TerminalReporter) AppListItem(name, description string, installed bool, version string) {
-	if installed {
-		successColor.Printf("  %s ", IconCheck)
-		boldWhite.Print(name)
-		successColor.Print(" ● ")
-		dimColor.Print(description)
+		statusSuccess.Print("  " + IconCheck + "  ")
+		textPrimary.Print(name)
 		if version != "" {
-			dimColor.Print(" ")
-			italicDim.Printf("(%s)", truncateVersion(version))
+			textMuted.Printf("  %s", version)
 		}
 	} else {
-		dimColor.Printf("  %s ", IconCircle)
-		fmt.Print(name)
-		dimColor.Print(" ○ ")
-		dimColor.Print(description)
+		textDim.Print("  " + IconEmpty + "  ")
+		textSecondary.Print(name)
 	}
 	fmt.Println()
+
+	// Description on next line, indented
+	fmt.Print(r.pad())
+	textMuted.Printf("       %s\n", description)
 }
 
-// ProgressBar displays a progress bar.
-func (r *TerminalReporter) ProgressBar(current, total int, label string) {
-	width := 30
-	filled := (current * width) / total
-	empty := width - filled
-
-	bar := strings.Repeat("█", filled) + strings.Repeat("░", empty)
-	percent := (current * 100) / total
-
-	fmt.Printf("\r  ")
-	primaryColor.Printf("%s ", label)
-	dimColor.Print("[")
-	successColor.Print(bar[:filled])
-	dimColor.Print(bar[filled:])
-	dimColor.Print("] ")
-	boldWhite.Printf("%3d%%", percent)
-}
-
-// Divider prints a styled divider line.
+// Divider prints a subtle divider.
 func (r *TerminalReporter) Divider() {
 	fmt.Println()
-	dimColor.Print("  ")
-	for i := 0; i < 60; i++ {
-		if i%3 == 0 {
-			gradientStart.Print("·")
-		} else if i%3 == 1 {
-			gradientMid.Print("·")
+	fmt.Print(r.pad())
+	textDim.Print("  ")
+	for i := 0; i < r.contentWidth-4; i++ {
+		if i%2 == 0 {
+			textDim.Print(IconDot)
 		} else {
-			gradientEnd.Print("·")
+			fmt.Print(" ")
 		}
 	}
 	fmt.Println()
 }
 
-// Badge prints a colored badge.
-func (r *TerminalReporter) Badge(text string, badgeType string) {
-	switch badgeType {
-	case "success":
-		successBadge.Printf(" %s ", text)
-	case "error":
-		errorBadge.Printf(" %s ", text)
-	case "warning":
-		warningBadge.Printf(" %s ", text)
-	case "info":
-		infoBadge.Printf(" %s ", text)
-	default:
-		dimColor.Printf(" %s ", text)
+// EmptyLine prints a blank line with proper padding.
+func (r *TerminalReporter) EmptyLine() {
+	fmt.Println()
+}
+
+// Text prints regular text with padding.
+func (r *TerminalReporter) Text(message string) {
+	fmt.Print(r.pad())
+	textSecondary.Printf("  %s\n", message)
+}
+
+// Muted prints muted/dim text with padding.
+func (r *TerminalReporter) Muted(message string) {
+	fmt.Print(r.pad())
+	textMuted.Printf("  %s\n", message)
+}
+
+// Accent prints accented text.
+func (r *TerminalReporter) Accent(message string) {
+	fmt.Print(r.pad())
+	accent.Printf("  %s\n", message)
+}
+
+// ListItem prints a simple list item.
+func (r *TerminalReporter) ListItem(text string, highlighted bool) {
+	fmt.Print(r.pad())
+	if highlighted {
+		accent.Print("  " + IconArrow + "  ")
+		textPrimary.Println(text)
+	} else {
+		textMuted.Print("     ")
+		textSecondary.Println(text)
 	}
 }
 
-// Spinner starts a spinner animation (call in goroutine).
+// OptionItem prints an option for selection.
+func (r *TerminalReporter) OptionItem(number int, title, description string) {
+	fmt.Print(r.pad())
+	textMuted.Print("  ")
+	accent.Printf("[%d]", number)
+	textMuted.Print("  ")
+	textPrimary.Print(title)
+	if description != "" {
+		textMuted.Printf("  %s  %s", IconArrow, description)
+	}
+	fmt.Println()
+}
+
+// StartSpinner starts a spinner animation.
 func (r *TerminalReporter) StartSpinner(message string) {
 	if r.spinnerActive {
 		return
@@ -362,9 +351,9 @@ func (r *TerminalReporter) StartSpinner(message string) {
 				r.spinnerActive = false
 				return
 			default:
-				fmt.Printf("\r  ")
-				primaryColor.Printf("%s ", frames[i%len(frames)])
-				dimColor.Printf("%s...", message)
+				fmt.Printf("\r%s", r.pad())
+				accent.Printf("  %s  ", frames[i%len(frames)])
+				textMuted.Printf("%s", message)
 				time.Sleep(80 * time.Millisecond)
 				i++
 			}
@@ -379,34 +368,54 @@ func (r *TerminalReporter) StopSpinner() {
 	}
 }
 
-// truncateVersion truncates long version strings.
-func truncateVersion(version string) string {
-	// Remove common prefixes
-	version = strings.TrimPrefix(version, "Docker version ")
-	version = strings.TrimPrefix(version, "NVIM ")
-	version = strings.TrimPrefix(version, "zsh ")
+// Box prints content in a minimal box.
+func (r *TerminalReporter) Box(lines []string) {
+	fmt.Println()
+	fmt.Print(r.pad())
+	borderColor.Print("  ┌")
+	borderColor.Print(strings.Repeat("─", r.contentWidth-6))
+	borderColor.Println("┐")
 
-	// Truncate if too long
-	if len(version) > 25 {
-		return version[:22] + "..."
+	for _, line := range lines {
+		fmt.Print(r.pad())
+		borderColor.Print("  │")
+		fmt.Print("  ")
+		textSecondary.Print(line)
+		// Calculate remaining space
+		remaining := r.contentWidth - 10 - len([]rune(line))
+		if remaining > 0 {
+			fmt.Print(strings.Repeat(" ", remaining))
+		}
+		borderColor.Println("│")
 	}
-	return version
+
+	fmt.Print(r.pad())
+	borderColor.Print("  └")
+	borderColor.Print(strings.Repeat("─", r.contentWidth-6))
+	borderColor.Println("┘")
+	fmt.Println()
 }
 
-// centerString centers a string within a given width.
-func centerString(s string, width int) string {
-	runeLen := len([]rune(s))
-	if runeLen >= width {
-		return s
+// StatusBadge prints a status indicator.
+func (r *TerminalReporter) StatusBadge(status string) {
+	switch status {
+	case "installed":
+		statusSuccess.Print(" ● ")
+	case "not_installed":
+		textDim.Print(" ○ ")
+	case "error":
+		statusError.Print(" ✕ ")
+	case "pending":
+		textMuted.Print(" ◌ ")
 	}
-	padding := (width - runeLen) / 2
-	return strings.Repeat(" ", padding) + s + strings.Repeat(" ", width-runeLen-padding)
 }
 
-// max returns the maximum of two integers.
-func max(a, b int) int {
-	if a > b {
-		return a
-	}
-	return b
+// GetPadding returns the left padding for external use.
+func (r *TerminalReporter) GetPadding() string {
+	return r.pad()
+}
+
+// GetContentWidth returns the content width.
+func (r *TerminalReporter) GetContentWidth() int {
+	return r.contentWidth
 }

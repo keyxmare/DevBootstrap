@@ -4,6 +4,7 @@ package cli
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/fatih/color"
 	"github.com/keyxmare/DevBootstrap/internal/application/usecase"
@@ -15,14 +16,16 @@ import (
 	"github.com/keyxmare/DevBootstrap/internal/port/secondary"
 )
 
-// Colors for the CLI
+// Soft minimal colors
 var (
-	successColor = color.New(color.FgHiGreen)
-	dimColor     = color.New(color.Faint)
-	boldWhite    = color.New(color.FgHiWhite, color.Bold)
-	boldGreen    = color.New(color.FgHiGreen, color.Bold)
-	boldCyan     = color.New(color.FgHiCyan, color.Bold)
-	italicDim    = color.New(color.Faint, color.Italic)
+	accent        = color.New(color.FgCyan)
+	textPrimary   = color.New(color.FgHiWhite)
+	textSecondary = color.New(color.FgWhite)
+	textMuted     = color.New(color.Faint)
+	textDim       = color.New(color.FgHiBlack)
+	statusSuccess = color.New(color.FgGreen)
+	statusError   = color.New(color.FgRed)
+	labelColor    = color.New(color.FgCyan, color.Faint)
 )
 
 const version = "3.0.0"
@@ -83,7 +86,7 @@ func (a *App) Run() int {
 
 // printBanner prints the application banner.
 func (a *App) printBanner() {
-	a.reporter.Header(fmt.Sprintf("DevBootstrap v%s (Clean Architecture)", version))
+	a.reporter.Header(fmt.Sprintf("DevBootstrap v%s", version))
 }
 
 // printSystemInfo prints detected system information.
@@ -94,127 +97,130 @@ func (a *App) printSystemInfo() {
 		rootStr = "Oui"
 	}
 
-	a.reporter.Summary("Informations systeme", map[string]string{
+	a.reporter.Summary("Système", map[string]string{
 		"OS":           platform.OSName(),
 		"Version":      platform.OSVersion(),
 		"Architecture": platform.Arch().String(),
-		"Home":         platform.HomeDir(),
 		"Root":         rootStr,
 	})
 }
 
 // displayAvailableApps displays all available applications with their status.
 func (a *App) displayAvailableApps(apps []*entity.Application) {
-	a.reporter.Section("Applications disponibles")
+	a.reporter.Section("Applications")
 	fmt.Println()
 
+	// Count installed
+	installedCount := 0
 	for _, app := range apps {
 		if app.IsInstalled() {
-			// Installed app - green checkmark and bold name
-			successColor.Print("   ✓ ")
-			boldGreen.Print(app.Name())
+			installedCount++
+		}
+	}
 
-			// Version badge (only if version is meaningful)
+	// Get padding from reporter if available
+	pad := "          " // default padding
+
+	for _, app := range apps {
+		fmt.Print(pad)
+
+		if app.IsInstalled() {
+			statusSuccess.Print("  ●  ")
+			textPrimary.Print(app.Name())
+
+			// Version
 			if !app.Version().IsEmpty() {
-				ver := truncateVersion(app.Version().String())
-				if ver != "" && ver != "app only" {
-					dimColor.Print("  ")
-					italicDim.Printf("(%s)", ver)
+				ver := cleanVersion(app.Version().String())
+				if ver != "" {
+					textMuted.Printf("  %s", ver)
 				}
 			}
-			fmt.Println()
-
-			// Description
-			dimColor.Printf("       %s\n", app.Description())
 		} else {
-			// Not installed - dim circle
-			dimColor.Print("   ○ ")
-			boldWhite.Print(app.Name())
-			fmt.Println()
-
-			// Description
-			dimColor.Printf("       %s\n", app.Description())
+			textDim.Print("  ○  ")
+			textSecondary.Print(app.Name())
 		}
 		fmt.Println()
+
+		// Description
+		fmt.Print(pad)
+		textMuted.Printf("       %s\n", app.Description())
+		fmt.Println()
 	}
+
+	// Summary line
+	fmt.Print(pad)
+	textMuted.Printf("  %d/%d installées\n", installedCount, len(apps))
 }
 
-// truncateVersion truncates long version strings for display.
-func truncateVersion(version string) string {
-	// Common prefixes to remove
-	prefixes := []string{
-		"Docker version ",
-		"NVIM ",
-		"zsh ",
-		"(commande 'code' non configuree)",
-	}
-	for _, prefix := range prefixes {
-		if len(version) >= len(prefix) && version[:len(prefix)] == prefix {
-			version = version[len(prefix):]
-			break
-		}
+// cleanVersion cleans and shortens version strings.
+func cleanVersion(version string) string {
+	// Remove common prefixes
+	version = strings.TrimPrefix(version, "Docker version ")
+	version = strings.TrimPrefix(version, "NVIM ")
+	version = strings.TrimPrefix(version, "zsh ")
+
+	// Handle VSCode special case
+	if strings.Contains(version, "commande 'code' non") {
+		return ""
 	}
 
-	// Handle special case for VSCode not configured
-	if version == "(commande 'code' non configuree)" {
-		return "app only"
+	// Simplify Nerd Font names
+	if strings.Contains(version, "Nerd Font") {
+		// Extract just the font family name
+		parts := strings.Split(version, " ")
+		if len(parts) > 0 {
+			return parts[0]
+		}
 	}
 
 	// Remove build info after comma
-	if idx := indexOf(version, ","); idx > 0 {
+	if idx := strings.Index(version, ","); idx > 0 {
 		version = version[:idx]
 	}
 
-	// Remove git hash info (like -g94144d4678)
-	if idx := indexOf(version, "+g"); idx > 0 {
+	// Remove git hash
+	if idx := strings.Index(version, "+g"); idx > 0 {
 		version = version[:idx]
 	}
 
 	// Remove -dev suffix
-	if idx := indexOf(version, "-dev"); idx > 0 {
+	if idx := strings.Index(version, "-dev"); idx > 0 {
 		version = version[:idx]
 	}
 
-	// Remove architecture info in parentheses for zsh
-	if idx := indexOf(version, " ("); idx > 0 {
+	// Remove architecture in parentheses
+	if idx := strings.Index(version, " ("); idx > 0 {
 		version = version[:idx]
 	}
 
-	// Final truncate if still too long
+	// Truncate if too long
 	if len(version) > 20 {
 		return version[:17] + "..."
 	}
-	return version
-}
 
-// indexOf returns the index of substr in s, or -1 if not found.
-func indexOf(s, substr string) int {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return i
-		}
-	}
-	return -1
+	return version
 }
 
 // askMode asks the user to select install or uninstall mode.
 func (a *App) askMode() bool {
-	a.reporter.Section("Mode d'operation")
+	a.reporter.Section("Action")
 	fmt.Println()
 
-	// Option 1 - Install
-	boldCyan.Print("   [1] ")
-	boldWhite.Print(" Installer")
-	dimColor.Println("  →  Ajouter de nouvelles applications")
+	pad := "          "
 
-	// Option 2 - Uninstall
-	boldCyan.Print("   [2] ")
-	boldWhite.Print(" Desinstaller")
-	dimColor.Println("  →  Supprimer des applications")
+	fmt.Print(pad)
+	accent.Print("  [1]  ")
+	textPrimary.Print("Installer")
+	textMuted.Println("     Ajouter des applications")
+
+	fmt.Print(pad)
+	accent.Print("  [2]  ")
+	textPrimary.Print("Désinstaller")
+	textMuted.Println("  Supprimer des applications")
 
 	fmt.Println()
 
-	choice := a.prompter.Select("Votre choix", []string{"Installer", "Desinstaller"}, 0)
+	choice := a.prompter.Select("Choix", []string{"Installer", "Désinstaller"}, 0)
 	return choice == 1
 }
 
@@ -229,8 +235,8 @@ func (a *App) runInstallMode(ctx context.Context, apps []*entity.Application) in
 	}
 
 	if len(notInstalled) == 0 {
-		a.reporter.Success("Toutes les applications sont deja installees!")
-		if !a.prompter.Confirm("Voulez-vous quand meme reinstaller certaines applications?", false) {
+		a.reporter.Success("Toutes les applications sont déjà installées")
+		if !a.prompter.Confirm("Réinstaller certaines applications?", false) {
 			return 0
 		}
 	}
@@ -238,13 +244,13 @@ func (a *App) runInstallMode(ctx context.Context, apps []*entity.Application) in
 	// Ask user to select apps
 	selectedApps := a.askMultiSelectInstall(apps)
 	if len(selectedApps) == 0 {
-		a.reporter.Info("Aucune application selectionnee")
+		a.reporter.Info("Aucune sélection")
 		return 0
 	}
 
 	// Show summary and confirm
 	if !a.showInstallSummary(selectedApps) {
-		a.reporter.Info("Installation annulee")
+		a.reporter.Info("Annulé")
 		return 0
 	}
 
@@ -280,20 +286,20 @@ func (a *App) runUninstallMode(ctx context.Context, apps []*entity.Application) 
 	}
 
 	if len(installed) == 0 {
-		a.reporter.Warning("Aucune application installee a desinstaller")
+		a.reporter.Warning("Aucune application installée")
 		return 0
 	}
 
 	// Ask user to select apps
 	selectedApps := a.askMultiSelectUninstall(installed)
 	if len(selectedApps) == 0 {
-		a.reporter.Info("Aucune application selectionnee")
+		a.reporter.Info("Aucune sélection")
 		return 0
 	}
 
 	// Show summary and confirm
 	if !a.showUninstallSummary(selectedApps) {
-		a.reporter.Info("Desinstallation annulee")
+		a.reporter.Info("Annulé")
 		return 0
 	}
 
@@ -330,12 +336,11 @@ func (a *App) askMultiSelectInstall(apps []*entity.Application) []*entity.Applic
 				result = append(result, app)
 			}
 		}
-		a.reporter.Section("Mode non-interactif")
-		a.reporter.Info(fmt.Sprintf("Installation automatique de %d application(s)", len(result)))
+		a.reporter.Info(fmt.Sprintf("Mode auto: %d application(s)", len(result)))
 		return result
 	}
 
-	a.reporter.Section("Selection des installations")
+	a.reporter.Section("Sélection")
 	fmt.Println()
 
 	options := make([]string, 0, len(apps))
@@ -344,14 +349,14 @@ func (a *App) askMultiSelectInstall(apps []*entity.Application) []*entity.Applic
 	for i, app := range apps {
 		status := ""
 		if app.IsInstalled() {
-			status = " (deja installe)"
+			status = " (installé)"
 		} else {
 			defaultIndices = append(defaultIndices, i)
 		}
 		options = append(options, fmt.Sprintf("%s%s", app.Name(), status))
 	}
 
-	selected := a.prompter.MultiSelect("Quelles applications souhaitez-vous installer?", options, defaultIndices)
+	selected := a.prompter.MultiSelect("Applications à installer", options, defaultIndices)
 
 	result := make([]*entity.Application, 0, len(selected))
 	for _, idx := range selected {
@@ -366,11 +371,11 @@ func (a *App) askMultiSelectInstall(apps []*entity.Application) []*entity.Applic
 // askMultiSelectUninstall asks the user to select applications to uninstall.
 func (a *App) askMultiSelectUninstall(installed []*entity.Application) []*entity.Application {
 	if a.container.NoInteraction {
-		a.reporter.Warning("Desinstallation automatique non supportee en mode non-interactif")
+		a.reporter.Warning("Désinstallation auto non supportée")
 		return nil
 	}
 
-	a.reporter.Section("Selection des desinstallations")
+	a.reporter.Section("Sélection")
 	fmt.Println()
 
 	options := make([]string, 0, len(installed))
@@ -378,7 +383,7 @@ func (a *App) askMultiSelectUninstall(installed []*entity.Application) []*entity
 		options = append(options, app.Name())
 	}
 
-	selected := a.prompter.MultiSelect("Quelles applications souhaitez-vous desinstaller?", options, []int{})
+	selected := a.prompter.MultiSelect("Applications à désinstaller", options, []int{})
 
 	result := make([]*entity.Application, 0, len(selected))
 	for _, idx := range selected {
@@ -392,98 +397,119 @@ func (a *App) askMultiSelectUninstall(installed []*entity.Application) []*entity
 
 // showInstallSummary shows the installation summary and asks for confirmation.
 func (a *App) showInstallSummary(apps []*entity.Application) bool {
-	a.reporter.Section("Resume de l'installation")
+	a.reporter.Section("Récapitulatif")
 	fmt.Println()
 
-	boldWhite.Println("   Applications a installer:")
+	pad := "          "
+
+	fmt.Print(pad)
+	textMuted.Println("  Applications sélectionnées:")
 	fmt.Println()
+
 	for _, app := range apps {
-		boldCyan.Print("    → ")
-		boldWhite.Print(app.Name())
-		dimColor.Printf("  %s\n", app.Description())
+		fmt.Print(pad)
+		accent.Print("    →  ")
+		textPrimary.Println(app.Name())
 	}
-	fmt.Println()
 
-	return a.prompter.Confirm("Proceder a l'installation?", true)
+	fmt.Println()
+	return a.prompter.Confirm("Continuer?", true)
 }
 
 // showUninstallSummary shows the uninstallation summary and asks for confirmation.
 func (a *App) showUninstallSummary(apps []*entity.Application) bool {
-	a.reporter.Section("Resume de la desinstallation")
+	a.reporter.Section("Récapitulatif")
 	fmt.Println()
 
-	boldWhite.Println("   Applications a desinstaller:")
+	pad := "          "
+
+	fmt.Print(pad)
+	textMuted.Println("  Applications à supprimer:")
 	fmt.Println()
+
 	for _, app := range apps {
-		color.New(color.FgHiRed).Print("    ✗ ")
-		boldWhite.Println(app.Name())
+		fmt.Print(pad)
+		statusError.Print("    ✕  ")
+		textPrimary.Println(app.Name())
 	}
-	fmt.Println()
-	a.reporter.Warning("Cette action supprimera les applications et leurs configurations!")
 
-	return a.prompter.Confirm("Etes-vous sur de vouloir continuer?", false)
+	fmt.Println()
+	a.reporter.Warning("Les configurations seront supprimées")
+	fmt.Println()
+
+	return a.prompter.Confirm("Confirmer la suppression?", false)
 }
 
 // showFinalSummary shows the final summary of install operations.
 func (a *App) showFinalSummary(results map[string]*result.InstallResult, apps []*entity.Application) int {
 	fmt.Println()
-	a.reporter.Section("Resume final")
+	a.reporter.Section("Résultat")
 	fmt.Println()
 
+	pad := "          "
 	successCount := 0
+
 	for _, app := range apps {
 		r, ok := results[app.ID().String()]
 		if !ok {
 			continue
 		}
 
+		fmt.Print(pad)
 		if r.Success() {
 			successCount++
-			a.reporter.Success(fmt.Sprintf("%s installe avec succes", app.Name()))
+			statusSuccess.Print("  ✓  ")
+			textPrimary.Println(app.Name())
 		} else {
-			a.reporter.Error(fmt.Sprintf("%s - echec", app.Name()))
+			statusError.Print("  ✕  ")
+			textSecondary.Println(app.Name())
 		}
 	}
 
 	fmt.Println()
 	failureCount := len(apps) - successCount
 	if failureCount == 0 {
-		a.reporter.Success(fmt.Sprintf("Toutes les operations terminees avec succes! (%d/%d)", successCount, len(apps)))
+		a.reporter.Success(fmt.Sprintf("Terminé avec succès (%d/%d)", successCount, len(apps)))
 		return 0
 	}
 
-	a.reporter.Warning(fmt.Sprintf("Operations terminees: %d succes, %d echec(s)", successCount, failureCount))
+	a.reporter.Warning(fmt.Sprintf("Terminé: %d succès, %d échec(s)", successCount, failureCount))
 	return 1
 }
 
 // showUninstallFinalSummary shows the final summary of uninstall operations.
 func (a *App) showUninstallFinalSummary(results map[string]*result.UninstallResult, apps []*entity.Application) int {
 	fmt.Println()
-	a.reporter.Section("Resume final")
+	a.reporter.Section("Résultat")
 	fmt.Println()
 
+	pad := "          "
 	successCount := 0
+
 	for _, app := range apps {
 		r, ok := results[app.ID().String()]
 		if !ok {
 			continue
 		}
 
+		fmt.Print(pad)
 		if r.Success() {
 			successCount++
-			a.reporter.Success(fmt.Sprintf("%s desinstalle avec succes", app.Name()))
+			statusSuccess.Print("  ✓  ")
+			textPrimary.Println(app.Name())
 		} else {
-			a.reporter.Error(fmt.Sprintf("%s - echec", app.Name()))
+			statusError.Print("  ✕  ")
+			textSecondary.Println(app.Name())
 		}
 	}
 
 	fmt.Println()
 	failureCount := len(apps) - successCount
 	if failureCount == 0 {
-		a.reporter.Success(fmt.Sprintf("Toutes les operations terminees avec succes! (%d/%d)", successCount, len(apps)))
+		a.reporter.Success(fmt.Sprintf("Terminé avec succès (%d/%d)", successCount, len(apps)))
 		return 0
 	}
 
-	a.reporter.Warning(fmt.Sprintf("Operations terminees: %d succes, %d echec(s)", successCount, failureCount))
+	a.reporter.Warning(fmt.Sprintf("Terminé: %d succès, %d échec(s)", successCount, failureCount))
 	return 1
 }
