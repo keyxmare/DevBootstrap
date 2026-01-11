@@ -1,7 +1,9 @@
-"""macOS-specific Docker installer using Docker Desktop."""
+"""macOS-specific Docker installer using Docker Desktop DMG."""
 
 import os
 import time
+import tempfile
+import subprocess
 from typing import Optional
 from .base import BaseInstaller, InstallOptions, InstallResult
 from ..utils.system import SystemInfo, Architecture
@@ -10,74 +12,21 @@ from ..utils.runner import CommandRunner
 
 
 class MacOSInstaller(BaseInstaller):
-    """Installer for Docker on macOS using Docker Desktop."""
+    """Installer for Docker on macOS using Docker Desktop DMG."""
+
+    # Docker Desktop download URLs
+    DOCKER_DMG_URL_ARM64 = "https://desktop.docker.com/mac/main/arm64/Docker.dmg"
+    DOCKER_DMG_URL_AMD64 = "https://desktop.docker.com/mac/main/amd64/Docker.dmg"
 
     def __init__(self, system_info: SystemInfo, cli: CLI, runner: CommandRunner):
         """Initialize the macOS Docker installer."""
         super().__init__(system_info, cli, runner)
-        self._homebrew_path: Optional[str] = None
 
-    def _get_homebrew_path(self) -> Optional[str]:
-        """Get the Homebrew installation path."""
-        if self._homebrew_path:
-            return self._homebrew_path
-
-        # Check common Homebrew locations
-        possible_paths = [
-            "/opt/homebrew/bin/brew",  # Apple Silicon
-            "/usr/local/bin/brew",      # Intel
-        ]
-
-        for path in possible_paths:
-            if os.path.exists(path):
-                self._homebrew_path = path
-                return path
-
-        # Check if brew is in PATH
-        brew_path = self.runner.get_command_path("brew")
-        if brew_path:
-            self._homebrew_path = brew_path
-            return brew_path
-
-        return None
-
-    def _ensure_homebrew_in_path(self) -> bool:
-        """Ensure Homebrew is in the PATH for this session."""
-        brew_path = self._get_homebrew_path()
-        if not brew_path:
-            return False
-
-        brew_dir = os.path.dirname(brew_path)
-        current_path = os.environ.get("PATH", "")
-
-        if brew_dir not in current_path:
-            os.environ["PATH"] = f"{brew_dir}:{current_path}"
-
-        return True
-
-    def _install_homebrew(self) -> bool:
-        """Install Homebrew if not present."""
-        if self._get_homebrew_path():
-            self._ensure_homebrew_in_path()
-            self.cli.print_success("Homebrew est deja installe")
-            return True
-
-        self.cli.print_info("Installation de Homebrew...")
-
-        # Homebrew installation script
-        install_script = '/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"'
-
-        result = self.runner.run_interactive(
-            ["/bin/bash", "-c", install_script],
-            description="Installation de Homebrew",
-            sudo=False
-        )
-
-        if not result:
-            return False
-
-        self._ensure_homebrew_in_path()
-        return self._get_homebrew_path() is not None
+    def _get_docker_dmg_url(self) -> str:
+        """Get the appropriate Docker DMG URL for the current architecture."""
+        if self.system_info.architecture == Architecture.ARM64:
+            return self.DOCKER_DMG_URL_ARM64
+        return self.DOCKER_DMG_URL_AMD64
 
     def check_existing_installation(self) -> bool:
         """Check if Docker is already installed."""
@@ -105,48 +54,97 @@ class MacOSInstaller(BaseInstaller):
         return False
 
     def install_docker(self) -> bool:
-        """Install Docker Desktop using Homebrew Cask."""
-        # Ensure Homebrew is available
-        if not self._install_homebrew():
-            self.cli.print_error("Homebrew est requis pour installer Docker Desktop")
-            return False
+        """Install Docker Desktop by downloading and installing the official DMG."""
+        dmg_url = self._get_docker_dmg_url()
+        arch_name = "Apple Silicon" if self.system_info.architecture == Architecture.ARM64 else "Intel"
 
-        brew_path = self._get_homebrew_path()
+        self.cli.print_info(f"Telechargement de Docker Desktop pour {arch_name}...")
+        self.cli.print_info(f"URL: {dmg_url}")
 
-        # Check if Docker Desktop is already installed via brew
-        result = self.runner.run(
-            [brew_path, "list", "--cask", "docker"],
-            sudo=False
-        )
+        # Create temporary directory for download
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            dmg_path = os.path.join(tmp_dir, "Docker.dmg")
 
-        if result.success:
-            self.cli.print_info("Docker Desktop est deja installe via Homebrew")
-            # Try to upgrade
+            # Download the DMG
+            self.cli.print_progress("Telechargement en cours...")
             result = self.runner.run(
-                [brew_path, "upgrade", "--cask", "docker"],
-                description="Mise a jour de Docker Desktop",
+                ["curl", "-fSL", "-o", dmg_path, dmg_url],
+                description="Telechargement de Docker Desktop",
                 sudo=False,
-                timeout=600
+                timeout=600  # 10 minutes for download
             )
-            return True
 
-        # Install Docker Desktop
-        self.cli.print_info("Installation de Docker Desktop via Homebrew...")
-        result = self.runner.run(
-            [brew_path, "install", "--cask", "docker"],
-            description="Installation de Docker Desktop",
-            sudo=False,
-            timeout=900  # Docker Desktop is large
-        )
+            if not result.success:
+                self.cli.print_error("Echec du telechargement de Docker Desktop")
+                self.cli.print_info("Vous pouvez telecharger manuellement depuis:")
+                self.cli.print_info("https://www.docker.com/products/docker-desktop/")
+                return False
 
-        if not result.success:
-            self.cli.print_error("Echec de l'installation de Docker Desktop")
-            self.cli.print_info("Vous pouvez telecharger Docker Desktop manuellement:")
-            self.cli.print_info("https://www.docker.com/products/docker-desktop/")
-            return False
+            self.cli.print_success("Telechargement termine")
 
-        self.cli.print_success("Docker Desktop installe")
-        return True
+            # Mount the DMG
+            self.cli.print_info("Montage du DMG...")
+            mount_point = "/Volumes/Docker"
+
+            # Unmount if already mounted
+            if os.path.exists(mount_point):
+                self.runner.run(["hdiutil", "detach", mount_point, "-quiet"], sudo=False)
+
+            result = self.runner.run(
+                ["hdiutil", "attach", dmg_path, "-nobrowse", "-quiet"],
+                description="Montage du DMG",
+                sudo=False,
+                timeout=60
+            )
+
+            if not result.success:
+                self.cli.print_error("Echec du montage du DMG")
+                return False
+
+            try:
+                # Copy Docker.app to /Applications
+                self.cli.print_info("Installation de Docker Desktop dans /Applications...")
+                docker_app_src = "/Volumes/Docker/Docker.app"
+
+                if not os.path.exists(docker_app_src):
+                    self.cli.print_error("Docker.app non trouve dans le DMG")
+                    return False
+
+                # Remove existing installation if present
+                docker_app_dest = "/Applications/Docker.app"
+                if os.path.exists(docker_app_dest):
+                    self.cli.print_info("Suppression de l'ancienne version...")
+                    result = self.runner.run(
+                        ["rm", "-rf", docker_app_dest],
+                        sudo=False
+                    )
+                    if not result.success:
+                        self.cli.print_error("Impossible de supprimer l'ancienne version")
+                        return False
+
+                # Copy the app
+                result = self.runner.run(
+                    ["cp", "-R", docker_app_src, docker_app_dest],
+                    description="Copie de Docker.app",
+                    sudo=False,
+                    timeout=120
+                )
+
+                if not result.success:
+                    self.cli.print_error("Echec de la copie de Docker.app")
+                    return False
+
+                self.cli.print_success("Docker Desktop installe dans /Applications")
+                return True
+
+            finally:
+                # Always unmount the DMG
+                self.cli.print_info("Demontage du DMG...")
+                self.runner.run(
+                    ["hdiutil", "detach", mount_point, "-quiet"],
+                    sudo=False,
+                    timeout=30
+                )
 
     def install_docker_compose(self) -> bool:
         """Docker Compose is included with Docker Desktop."""

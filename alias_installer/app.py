@@ -175,6 +175,15 @@ class AliasInstallerApp:
         return f'''
 # DevBootstrap command - syncs silently then runs locally
 {self.COMMAND_NAME}() {{
+    # Refuse to run as root/sudo on macOS (causes issues with Homebrew)
+    if [[ "$OSTYPE" == "darwin"* ]] && [[ $EUID -eq 0 ]]; then
+        echo "Erreur: Ne pas executer devbootstrap avec sudo sur macOS."
+        echo "Homebrew ne fonctionne pas correctement en root."
+        echo ""
+        echo "Utilisez simplement: devbootstrap"
+        return 1
+    fi
+
     local INSTALL_DIR="${{HOME}}/.devbootstrap"
     local REPO_URL="https://github.com/{self.GITHUB_REPO}"
 
@@ -247,6 +256,15 @@ class AliasInstallerApp:
             script_content = f'''#!/bin/bash
 # DevBootstrap - Installation automatique de l'environnement de developpement
 # https://github.com/{self.GITHUB_REPO}
+
+# Refuse to run as root/sudo on macOS (causes issues with Homebrew)
+if [[ "$OSTYPE" == "darwin"* ]] && [[ $EUID -eq 0 ]]; then
+    echo "Erreur: Ne pas executer devbootstrap avec sudo sur macOS."
+    echo "Homebrew ne fonctionne pas correctement en root."
+    echo ""
+    echo "Utilisez simplement: devbootstrap"
+    exit 1
+fi
 
 INSTALL_DIR="${{HOME}}/.devbootstrap"
 REPO_URL="https://github.com/{self.GITHUB_REPO}"
