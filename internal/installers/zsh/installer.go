@@ -358,18 +358,35 @@ func (i *OhMyZshInstaller) setDefaultShell() {
 
 	i.CLI.PrintInfo("Configuration de Zsh comme shell par defaut...")
 
-	// Use sudo chsh to avoid password prompt (uses pre-cached sudo credentials)
-	result := i.Runner.Run(
-		[]string{"chsh", "-s", zshPath, username},
-		runner.WithSudo(),
-		runner.WithDescription("Configuration du shell par defaut"),
-	)
+	var result *runner.Result
+
+	if i.SystemInfo.IsMacOS() {
+		// On macOS, use dscl to change shell (chsh always prompts for password)
+		// dscl . -change /Users/<username> UserShell <old_shell> <new_shell>
+		// Or simply: dscl . -create /Users/<username> UserShell <new_shell>
+		result = i.Runner.Run(
+			[]string{"dscl", ".", "-create", "/Users/" + username, "UserShell", zshPath},
+			runner.WithSudo(),
+			runner.WithDescription("Configuration du shell par defaut"),
+		)
+	} else {
+		// On Linux, use sudo chsh
+		result = i.Runner.Run(
+			[]string{"chsh", "-s", zshPath, username},
+			runner.WithSudo(),
+			runner.WithDescription("Configuration du shell par defaut"),
+		)
+	}
 
 	if result.Success {
 		i.CLI.PrintSuccess("Zsh defini comme shell par defaut")
 	} else {
 		i.CLI.PrintWarning("Impossible de definir Zsh comme shell par defaut")
-		i.CLI.PrintInfo("Executez manuellement: sudo chsh -s " + zshPath + " " + username)
+		if i.SystemInfo.IsMacOS() {
+			i.CLI.PrintInfo("Executez manuellement: sudo dscl . -create /Users/" + username + " UserShell " + zshPath)
+		} else {
+			i.CLI.PrintInfo("Executez manuellement: sudo chsh -s " + zshPath + " " + username)
+		}
 	}
 }
 
