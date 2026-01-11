@@ -304,6 +304,26 @@ zstyle ':completion:*' menu select
 if [[ -d "${{ZSH_CUSTOM:-$ZSH/custom}}/plugins/zsh-completions/src" ]]; then
     fpath+="${{ZSH_CUSTOM:-$ZSH/custom}}/plugins/zsh-completions/src"
 fi
+
+# Couleur des suggestions automatiques (plus discrete)
+ZSH_AUTOSUGGEST_HIGHLIGHT_STYLE='fg=240'
+
+# Saut de ligne avant chaque nouveau prompt (apres l'output)
+precmd() {{
+    echo ""
+}}
+
+# Saut de ligne apres la commande (avant l'output)
+preexec() {{
+    echo ""
+}}
+
+# Couleurs pour ls
+export CLICOLOR=1
+export LSCOLORS=GxFxCxDxBxegedabagaced
+
+# Add ~/.local/bin to PATH
+export PATH="$HOME/.local/bin:$PATH"
 '''
 
         # Write .zshrc
