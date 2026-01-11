@@ -124,16 +124,27 @@ detect_arch() {
 }
 
 download_or_build() {
-    print_step "Telechargement de DevBootstrap..."
+    local is_update=false
+
+    # Check if already installed
+    if [ -f "$BIN_DIR/$BINARY_NAME" ]; then
+        is_update=true
+        print_step "Mise a jour de DevBootstrap..."
+    else
+        print_step "Installation de DevBootstrap..."
+    fi
 
     # Create directories
     mkdir -p "$CACHE_DIR"
     mkdir -p "$BIN_DIR"
 
-    # Sync repository
+    # Sync repository (always fetch latest)
     if command -v git &> /dev/null; then
         if [ -d "$CACHE_DIR/.git" ]; then
-            (cd "$CACHE_DIR" && git fetch origin main --quiet 2>/dev/null && git reset --hard origin/main --quiet 2>/dev/null) || true
+            print_step "Synchronisation avec GitHub..."
+            (cd "$CACHE_DIR" && git fetch origin main --quiet 2>/dev/null && git reset --hard origin/main --quiet 2>/dev/null) || {
+                print_warning "Echec de la synchronisation, utilisation du cache local"
+            }
         else
             rm -rf "$CACHE_DIR" 2>/dev/null || true
             git clone --depth=1 --quiet "$REPO_URL" "$CACHE_DIR" 2>/dev/null || {
@@ -148,8 +159,12 @@ download_or_build() {
     # Check if Go binary exists in repo
     if [ -f "$CACHE_DIR/$BINARY_NAME" ]; then
         chmod +x "$CACHE_DIR/$BINARY_NAME"
-        cp "$CACHE_DIR/$BINARY_NAME" "$BIN_DIR/$BINARY_NAME"
-        print_success "DevBootstrap installe"
+        cp -f "$CACHE_DIR/$BINARY_NAME" "$BIN_DIR/$BINARY_NAME"
+        if [ "$is_update" = true ]; then
+            print_success "DevBootstrap mis a jour"
+        else
+            print_success "DevBootstrap installe"
+        fi
         return 0
     fi
 
@@ -157,9 +172,13 @@ download_or_build() {
     if command -v go &> /dev/null && [ -f "$CACHE_DIR/go.mod" ]; then
         print_step "Compilation de DevBootstrap..."
         (cd "$CACHE_DIR" && go build -o "$BINARY_NAME" .) && {
-            cp "$CACHE_DIR/$BINARY_NAME" "$BIN_DIR/$BINARY_NAME"
+            cp -f "$CACHE_DIR/$BINARY_NAME" "$BIN_DIR/$BINARY_NAME"
             chmod +x "$BIN_DIR/$BINARY_NAME"
-            print_success "DevBootstrap compile et installe"
+            if [ "$is_update" = true ]; then
+                print_success "DevBootstrap compile et mis a jour"
+            else
+                print_success "DevBootstrap compile et installe"
+            fi
             return 0
         }
     fi
@@ -214,16 +233,24 @@ configure_path() {
 }
 
 show_next_steps() {
+    local is_update=$1
     echo ""
-    echo -e "${CYAN}${BOLD}Installation terminee!${RESET}"
-    echo ""
-    echo -e "${BOLD}Prochaines etapes:${RESET}"
-    echo ""
-    echo "  1. Redemarrez votre terminal ou executez:"
-    echo -e "     ${GREEN}source ~/.zshrc${RESET}  # ou ~/.bashrc"
-    echo ""
-    echo "  2. Lancez DevBootstrap:"
-    echo -e "     ${GREEN}devbootstrap${RESET}"
+    if [ "$is_update" = true ]; then
+        echo -e "${CYAN}${BOLD}Mise a jour terminee!${RESET}"
+        echo ""
+        echo -e "Lancez DevBootstrap:"
+        echo -e "     ${GREEN}devbootstrap${RESET}"
+    else
+        echo -e "${CYAN}${BOLD}Installation terminee!${RESET}"
+        echo ""
+        echo -e "${BOLD}Prochaines etapes:${RESET}"
+        echo ""
+        echo "  1. Redemarrez votre terminal ou executez:"
+        echo -e "     ${GREEN}source ~/.zshrc${RESET}  # ou ~/.bashrc"
+        echo ""
+        echo "  2. Lancez DevBootstrap:"
+        echo -e "     ${GREEN}devbootstrap${RESET}"
+    fi
     echo ""
 }
 
@@ -242,7 +269,7 @@ main() {
     fi
 
     # Detect OS and architecture
-    local os_type arch
+    local os_type arch is_update
     os_type=$(detect_os)
     arch=$(detect_arch)
     print_step "Systeme detecte: $os_type ($arch)"
@@ -253,14 +280,22 @@ main() {
         exit 1
     fi
 
+    # Check if this is an update
+    is_update=false
+    if [ -f "$BIN_DIR/$BINARY_NAME" ]; then
+        is_update=true
+    fi
+
     # Download/build and install binary
     download_or_build
 
-    # Configure PATH
-    configure_path
+    # Configure PATH (only on fresh install)
+    if [ "$is_update" = false ]; then
+        configure_path
+    fi
 
     # Show next steps
-    show_next_steps
+    show_next_steps "$is_update"
 
     # Run devbootstrap if arguments were passed
     if [ ${#BOOTSTRAP_ARGS[@]} -gt 0 ]; then
