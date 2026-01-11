@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 #
-# Neovim Installer - Script de lancement
+# DevBootstrap - Script de lancement unifié
 # Usage: curl -fsSL <url>/install.sh | bash
 #    or: ./install.sh
 #
-# Ce script détecte automatiquement votre système et installe Neovim
-# avec toutes ses dépendances et une configuration moderne.
+# Ce script affiche un menu avec toutes les applications disponibles
+# et permet de sélectionner ce que vous souhaitez installer.
 #
 
 set -e
@@ -21,12 +21,12 @@ RESET='\033[0m'
 
 # Configuration
 REPO_URL="https://github.com/keyxmare/DebBootstrap"
-INSTALL_DIR="${HOME}/.nvim-installer"
+INSTALL_DIR="${HOME}/.devbootstrap"
 
 print_banner() {
     echo ""
     echo -e "${CYAN}${BOLD}╔════════════════════════════════════════════════════════════════╗${RESET}"
-    echo -e "${CYAN}${BOLD}║${RESET}            ${BOLD}Neovim Installer${RESET} - Installation automatique            ${CYAN}${BOLD}║${RESET}"
+    echo -e "${CYAN}${BOLD}║${RESET}              ${BOLD}DevBootstrap${RESET} - Installation automatique              ${CYAN}${BOLD}║${RESET}"
     echo -e "${CYAN}${BOLD}╚════════════════════════════════════════════════════════════════╝${RESET}"
     echo ""
 }
@@ -145,7 +145,7 @@ ensure_python() {
 }
 
 download_installer() {
-    print_step "Téléchargement de l'installateur..."
+    print_step "Téléchargement de DevBootstrap..."
 
     # Create install directory
     mkdir -p "$INSTALL_DIR"
@@ -153,7 +153,7 @@ download_installer() {
     # Check if git is available
     if command -v git &> /dev/null; then
         if [ -d "$INSTALL_DIR/.git" ]; then
-            print_step "Mise à jour de l'installateur..."
+            print_step "Mise à jour de DevBootstrap..."
             cd "$INSTALL_DIR"
             git pull --quiet
         else
@@ -162,7 +162,7 @@ download_installer() {
         fi
     else
         # Download as zip if git not available
-        TEMP_ZIP="/tmp/nvim-installer.zip"
+        TEMP_ZIP="/tmp/devbootstrap.zip"
         curl -fsSL "${REPO_URL}/archive/refs/heads/main.zip" -o "$TEMP_ZIP"
 
         rm -rf "$INSTALL_DIR"
@@ -171,19 +171,19 @@ download_installer() {
         rm "$TEMP_ZIP"
     fi
 
-    print_success "Installateur téléchargé"
+    print_success "DevBootstrap téléchargé"
 }
 
 run_installer() {
     PYTHON_CMD="$1"
 
-    print_step "Lancement de l'installation..."
+    print_step "Lancement du menu d'installation..."
     echo ""
 
     cd "$INSTALL_DIR"
 
-    # Run the Python installer
-    "$PYTHON_CMD" -m nvim_installer.app "$@"
+    # Run the unified Python installer (bootstrap module)
+    "$PYTHON_CMD" -m bootstrap.app "$@"
 }
 
 main() {

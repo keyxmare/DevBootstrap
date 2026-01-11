@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """
-Neovim Installer - Point d'entrée direct
+DevBootstrap - Point d'entrée principal
+
+Affiche un menu unifié avec toutes les applications disponibles
+et permet de sélectionner ce que vous souhaitez installer.
 
 Usage:
     python3 install.py
@@ -13,7 +16,7 @@ import os
 # Add the project directory to the path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from nvim_installer.app import main
+from bootstrap.app import main
 
 if __name__ == "__main__":
     main()
