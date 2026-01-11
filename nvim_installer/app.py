@@ -17,7 +17,8 @@ class NeovimInstallerApp:
 
     VERSION = "1.0.0"
 
-    def __init__(self, dry_run: bool = False, no_interaction: bool = False):
+    # Mode: "install" for Neovim only, "config" for config/plugins only, "full" for both
+    def __init__(self, dry_run: bool = False, no_interaction: bool = False, mode: str = "full"):
         """Initialize the application."""
         self.cli = CLI(no_interaction=no_interaction)
         self.system_info = SystemInfo.detect()
@@ -26,6 +27,7 @@ class NeovimInstallerApp:
         self.config_manager = ConfigManager(self.system_info, self.cli, self.runner)
         self.dry_run = dry_run
         self.no_interaction = no_interaction
+        self.mode = mode  # "install", "config", or "full"
 
     def _get_installer(self):
         """Get the appropriate installer for the current platform."""
@@ -37,7 +39,12 @@ class NeovimInstallerApp:
 
     def print_banner(self):
         """Print the application banner."""
-        self.cli.print_header("Neovim Installer v" + self.VERSION)
+        if self.mode == "install":
+            self.cli.print_header("Neovim Installer v" + self.VERSION)
+        elif self.mode == "config":
+            self.cli.print_header("Neovim Config Installer v" + self.VERSION)
+        else:
+            self.cli.print_header("Neovim + Config Installer v" + self.VERSION)
 
     def print_system_info(self):
         """Print detected system information."""
@@ -67,6 +74,10 @@ class NeovimInstallerApp:
             version = self.runner.get_command_version("nvim")
             self.cli.print_info(f"Neovim existant détecté: {version}")
             self.cli.print_info(f"Chemin: {existing_nvim}")
+        elif self.mode == "config":
+            # Config mode requires Neovim to be installed
+            self.cli.print_error("Neovim n'est pas installé. Installez d'abord Neovim.")
+            return False
 
         return True
 
@@ -85,32 +96,59 @@ class NeovimInstallerApp:
         """Interactively get installation options from user."""
         self.cli.print_section("Configuration de l'installation")
 
-        # Ask for Neovim version
-        version_choice = self.cli.ask_choice(
-            "Quelle version de Neovim installer?",
-            ["Stable (recommandé)", "Nightly (dernières fonctionnalités)"],
-            default=0
-        )
-        neovim_version = "stable" if version_choice == 0 else "nightly"
-
-        # Ask about dependencies
-        install_deps = self.cli.ask_yes_no(
-            "Installer les dépendances recommandées (ripgrep, fzf, etc.)?",
-            default=True
-        )
-
-        # Ask about config
-        install_config = self.cli.ask_yes_no(
-            "Installer une configuration Neovim?",
-            default=True
-        )
-
-        # Get config directory
+        # Default values
+        neovim_version = "stable"
+        install_deps = True
+        install_config = False
         default_config_dir = self.system_info.get_config_dir()
-        config_dir = self.cli.ask_path(
-            "Répertoire de configuration Neovim",
-            default=default_config_dir
-        )
+
+        if self.mode == "install":
+            # Neovim only mode - just install Neovim
+            version_choice = self.cli.ask_choice(
+                "Quelle version de Neovim installer?",
+                ["Stable (recommandé)", "Nightly (dernières fonctionnalités)"],
+                default=0
+            )
+            neovim_version = "stable" if version_choice == 0 else "nightly"
+
+            install_deps = self.cli.ask_yes_no(
+                "Installer les dépendances recommandées (ripgrep, fzf, etc.)?",
+                default=True
+            )
+
+            # No config in install-only mode
+            install_config = False
+
+        elif self.mode == "config":
+            # Config only mode - skip Neovim installation
+            install_config = True
+
+        else:
+            # Full mode - ask everything
+            version_choice = self.cli.ask_choice(
+                "Quelle version de Neovim installer?",
+                ["Stable (recommandé)", "Nightly (dernières fonctionnalités)"],
+                default=0
+            )
+            neovim_version = "stable" if version_choice == 0 else "nightly"
+
+            install_deps = self.cli.ask_yes_no(
+                "Installer les dépendances recommandées (ripgrep, fzf, etc.)?",
+                default=True
+            )
+
+            install_config = self.cli.ask_yes_no(
+                "Installer une configuration Neovim?",
+                default=True
+            )
+
+        # Get config directory if config will be installed
+        config_dir = default_config_dir
+        if install_config or self.mode == "config":
+            config_dir = self.cli.ask_path(
+                "Répertoire de configuration Neovim",
+                default=default_config_dir
+            )
 
         return InstallOptions(
             config_dir=config_dir,
@@ -206,25 +244,61 @@ class NeovimInstallerApp:
         self.cli.print_section("Prochaines étapes")
 
         self.cli.print()
-        self.cli.print(f"{Colors.BOLD}1. Redémarrer le terminal{Colors.RESET}")
-        self.cli.print("   Pour que les changements de PATH prennent effet")
-        self.cli.print()
 
-        self.cli.print(f"{Colors.BOLD}2. Lancer Neovim{Colors.RESET}")
-        self.cli.print("   $ nvim")
-        self.cli.print()
+        if self.mode == "install":
+            # Neovim only mode
+            self.cli.print(f"{Colors.BOLD}1. Redémarrer le terminal{Colors.RESET}")
+            self.cli.print("   Pour que les changements de PATH prennent effet")
+            self.cli.print()
 
-        self.cli.print(f"{Colors.BOLD}3. Premier lancement{Colors.RESET}")
-        self.cli.print("   Les plugins seront automatiquement installés")
-        self.cli.print("   Attendre que Lazy.nvim termine l'installation")
-        self.cli.print()
+            self.cli.print(f"{Colors.BOLD}2. Lancer Neovim{Colors.RESET}")
+            self.cli.print("   $ nvim")
+            self.cli.print()
 
-        self.cli.print(f"{Colors.BOLD}Raccourcis utiles:{Colors.RESET}")
-        self.cli.print("   <Space>ff  - Rechercher des fichiers")
-        self.cli.print("   <Space>fg  - Rechercher du texte")
-        self.cli.print("   <Space>e   - Explorateur de fichiers")
-        self.cli.print("   <Space>gg  - LazyGit (si installé)")
-        self.cli.print()
+            self.cli.print(f"{Colors.BOLD}Prochaine étape recommandée:{Colors.RESET}")
+            self.cli.print("   Installer la configuration Neovim pour une meilleure experience:")
+            self.cli.print("   $ devbootstrap  # puis sélectionner 'Neovim Config'")
+            self.cli.print()
+
+        elif self.mode == "config":
+            # Config only mode
+            self.cli.print(f"{Colors.BOLD}1. Lancer Neovim{Colors.RESET}")
+            self.cli.print("   $ nvim")
+            self.cli.print()
+
+            self.cli.print(f"{Colors.BOLD}2. Premier lancement{Colors.RESET}")
+            self.cli.print("   Les plugins seront automatiquement installés")
+            self.cli.print("   Attendre que Lazy.nvim termine l'installation")
+            self.cli.print()
+
+            self.cli.print(f"{Colors.BOLD}Raccourcis utiles:{Colors.RESET}")
+            self.cli.print("   <Space>ff  - Rechercher des fichiers")
+            self.cli.print("   <Space>fg  - Rechercher du texte")
+            self.cli.print("   <Space>e   - Explorateur de fichiers")
+            self.cli.print("   <Space>gg  - LazyGit (si installé)")
+            self.cli.print()
+
+        else:
+            # Full mode
+            self.cli.print(f"{Colors.BOLD}1. Redémarrer le terminal{Colors.RESET}")
+            self.cli.print("   Pour que les changements de PATH prennent effet")
+            self.cli.print()
+
+            self.cli.print(f"{Colors.BOLD}2. Lancer Neovim{Colors.RESET}")
+            self.cli.print("   $ nvim")
+            self.cli.print()
+
+            self.cli.print(f"{Colors.BOLD}3. Premier lancement{Colors.RESET}")
+            self.cli.print("   Les plugins seront automatiquement installés")
+            self.cli.print("   Attendre que Lazy.nvim termine l'installation")
+            self.cli.print()
+
+            self.cli.print(f"{Colors.BOLD}Raccourcis utiles:{Colors.RESET}")
+            self.cli.print("   <Space>ff  - Rechercher des fichiers")
+            self.cli.print("   <Space>fg  - Rechercher du texte")
+            self.cli.print("   <Space>e   - Explorateur de fichiers")
+            self.cli.print("   <Space>gg  - LazyGit (si installé)")
+            self.cli.print()
 
     def run(self) -> int:
         """Run the complete installation process."""
@@ -239,8 +313,8 @@ class NeovimInstallerApp:
             if not self.check_prerequisites():
                 return 1
 
-            # Show dependency status
-            if self.installer:
+            # Show dependency status (only if installing Neovim)
+            if self.installer and self.mode != "config":
                 self.show_dependency_status()
 
             # Confirm to proceed
@@ -248,18 +322,45 @@ class NeovimInstallerApp:
                 self.cli.print_info("Installation annulée")
                 return 0
 
-            # Get install options
+            # Config-only mode: skip Neovim installation
+            if self.mode == "config":
+                # Get config options directly
+                config_options = self.get_config_options()
+                if config_options:
+                    # Summary for config mode
+                    self.cli.show_summary("Résumé de l'installation", {
+                        "Preset": config_options.preset.value,
+                        "Répertoire config": config_options.config_dir,
+                        "Plugins": "Oui" if config_options.install_plugins else "Non",
+                    })
+
+                    if not self.cli.ask_yes_no("Confirmer et lancer l'installation?", default=True):
+                        self.cli.print_info("Installation annulée")
+                        return 0
+
+                    if not self.run_config_setup(config_options):
+                        self.cli.print_warning("Configuration partiellement installée")
+
+                # Show final instructions
+                self.show_final_instructions()
+                self.cli.print_success("Installation terminée avec succès!")
+                return 0
+
+            # Install mode or full mode: install Neovim
             install_options = self.get_install_options()
             if not install_options:
                 return 1
 
             # Summary
-            self.cli.show_summary("Résumé de l'installation", {
+            summary = {
                 "Version Neovim": install_options.neovim_version,
                 "Dépendances": "Oui" if install_options.install_dependencies else "Non",
-                "Configuration": "Oui" if install_options.install_config else "Non",
-                "Répertoire config": install_options.config_dir,
-            })
+            }
+            if self.mode == "full":
+                summary["Configuration"] = "Oui" if install_options.install_config else "Non"
+                summary["Répertoire config"] = install_options.config_dir
+
+            self.cli.show_summary("Résumé de l'installation", summary)
 
             if not self.cli.ask_yes_no("Confirmer et lancer l'installation?", default=True):
                 self.cli.print_info("Installation annulée")
@@ -269,8 +370,8 @@ class NeovimInstallerApp:
             if not self.run_installation(install_options):
                 return 1
 
-            # Configuration setup if requested
-            if install_options.install_config:
+            # Configuration setup if requested (only in full mode)
+            if self.mode == "full" and install_options.install_config:
                 config_options = self.get_config_options()
                 if config_options:
                     if not self.run_config_setup(config_options):

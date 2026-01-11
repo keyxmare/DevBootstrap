@@ -38,7 +38,7 @@ AVAILABLE_APPS = [
     AppInfo(
         id="vscode",
         name="Visual Studio Code",
-        description="Éditeur de code source léger et puissant",
+        description="Editeur de code source leger et puissant",
         check_command="code",
         version_command="code --version | head -1",
         module="vscode_installer.app",
@@ -47,23 +47,39 @@ AVAILABLE_APPS = [
     AppInfo(
         id="neovim",
         name="Neovim",
-        description="Éditeur de texte moderne et extensible",
+        description="Editeur de texte moderne (sans configuration)",
         check_command="nvim",
         version_command="nvim --version | head -1",
         module="nvim_installer.app"
     ),
     AppInfo(
+        id="neovim-config",
+        name="Neovim Config",
+        description="Configuration et plugins pour Neovim (necessite Neovim)",
+        check_command="nvim",
+        version_command=None,
+        module="nvim_installer.app"
+    ),
+    AppInfo(
         id="zsh",
-        name="Zsh + Oh My Zsh",
-        description="Shell Z moderne avec Oh My Zsh et autocomplétion",
+        name="Zsh",
+        description="Shell Z moderne (sans Oh My Zsh)",
         check_command="zsh",
         version_command="zsh --version | head -1",
         module="zsh_installer.app"
     ),
     AppInfo(
+        id="oh-my-zsh",
+        name="Oh My Zsh",
+        description="Framework de configuration pour Zsh avec plugins (necessite Zsh)",
+        check_command="zsh",
+        version_command=None,
+        module="zsh_installer.app"
+    ),
+    AppInfo(
         id="alias",
         name="Commande devbootstrap",
-        description="Installe la commande 'devbootstrap' pour lancer l'installation via curl",
+        description="Installe la commande 'devbootstrap' pour lancer l'installation",
         check_command="devbootstrap",
         version_command=None,
         module="alias_installer.app"

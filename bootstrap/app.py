@@ -282,7 +282,11 @@ class BootstrapApp:
             # Import and run the installer module
             if app.id == "neovim":
                 from nvim_installer.app import NeovimInstallerApp
-                installer = NeovimInstallerApp(dry_run=self.dry_run, no_interaction=self.no_interaction)
+                installer = NeovimInstallerApp(dry_run=self.dry_run, no_interaction=self.no_interaction, mode="install")
+                return installer.run() == 0
+            elif app.id == "neovim-config":
+                from nvim_installer.app import NeovimInstallerApp
+                installer = NeovimInstallerApp(dry_run=self.dry_run, no_interaction=self.no_interaction, mode="config")
                 return installer.run() == 0
             elif app.id == "docker":
                 from docker_installer.app import DockerInstallerApp
@@ -294,7 +298,11 @@ class BootstrapApp:
                 return installer.run() == 0
             elif app.id == "zsh":
                 from zsh_installer.app import ZshInstallerApp
-                installer = ZshInstallerApp(dry_run=self.dry_run, no_interaction=self.no_interaction)
+                installer = ZshInstallerApp(dry_run=self.dry_run, no_interaction=self.no_interaction, mode="zsh")
+                return installer.run() == 0
+            elif app.id == "oh-my-zsh":
+                from zsh_installer.app import ZshInstallerApp
+                installer = ZshInstallerApp(dry_run=self.dry_run, no_interaction=self.no_interaction, mode="oh-my-zsh")
                 return installer.run() == 0
             elif app.id == "alias":
                 from alias_installer.app import AliasInstallerApp

@@ -30,6 +30,7 @@ class ZshTheme(Enum):
 @dataclass
 class InstallOptions:
     """Options for the installation process."""
+    install_zsh: bool = True  # Whether to install Zsh itself
     install_oh_my_zsh: bool = True
     install_autocompletion: bool = True
     install_syntax_highlighting: bool = True
@@ -361,15 +362,16 @@ fi
         if not self.install_missing_dependencies():
             warnings.append("Certaines dependances n'ont pas pu etre installees")
 
-        # Step 4: Install Zsh
-        self.cli.print_section("Installation de Zsh")
-        if not self.check_existing_installation():
-            if not self.install_zsh():
-                return InstallResult(
-                    success=False,
-                    message="Echec de l'installation de Zsh",
-                    errors=["Zsh installation failed"]
-                )
+        # Step 4: Install Zsh (if requested)
+        if options.install_zsh:
+            self.cli.print_section("Installation de Zsh")
+            if not self.check_existing_installation():
+                if not self.install_zsh():
+                    return InstallResult(
+                        success=False,
+                        message="Echec de l'installation de Zsh",
+                        errors=["Zsh installation failed"]
+                    )
 
         # Step 5: Backup existing config
         if options.backup_existing:
@@ -406,13 +408,14 @@ fi
                 else:
                     self.cli.print_success("zsh-completions installe")
 
-        # Step 8: Install bash-completion (for bash users)
-        self.cli.print_section("Installation de bash-completion")
-        if not self.install_bash_completion():
-            warnings.append("bash-completion non installe")
-            self.cli.print_warning("bash-completion non installe (optionnel)")
-        else:
-            self.cli.print_success("bash-completion installe")
+        # Step 8: Install bash-completion (only when installing Zsh)
+        if options.install_zsh:
+            self.cli.print_section("Installation de bash-completion")
+            if not self.install_bash_completion():
+                warnings.append("bash-completion non installe")
+                self.cli.print_warning("bash-completion non installe (optionnel)")
+            else:
+                self.cli.print_success("bash-completion installe")
 
         # Step 9: Create .zshrc
         if options.install_oh_my_zsh:

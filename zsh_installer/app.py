@@ -16,7 +16,8 @@ class ZshInstallerApp:
 
     VERSION = "1.0.0"
 
-    def __init__(self, dry_run: bool = False, no_interaction: bool = False):
+    # Mode: "zsh" for Zsh only, "oh-my-zsh" for Oh My Zsh only, "full" for both
+    def __init__(self, dry_run: bool = False, no_interaction: bool = False, mode: str = "full"):
         """Initialize the application."""
         self.cli = CLI(no_interaction=no_interaction)
         self.system_info = SystemInfo.detect()
@@ -24,6 +25,7 @@ class ZshInstallerApp:
         self.installer = self._get_installer()
         self.dry_run = dry_run
         self.no_interaction = no_interaction
+        self.mode = mode  # "zsh", "oh-my-zsh", or "full"
 
     def _get_installer(self):
         """Get the appropriate installer for the current platform."""
@@ -35,7 +37,12 @@ class ZshInstallerApp:
 
     def print_banner(self):
         """Print the application banner."""
-        self.cli.print_header("Zsh Installer v" + self.VERSION)
+        if self.mode == "zsh":
+            self.cli.print_header("Zsh Installer v" + self.VERSION)
+        elif self.mode == "oh-my-zsh":
+            self.cli.print_header("Oh My Zsh Installer v" + self.VERSION)
+        else:
+            self.cli.print_header("Zsh + Oh My Zsh Installer v" + self.VERSION)
 
     def print_system_info(self):
         """Print detected system information."""
@@ -60,14 +67,18 @@ class ZshInstallerApp:
         self.cli.print_success(f"Systeme supporte: {self.system_info.os_name}")
 
         # Check for existing Zsh installation
+        import os
         existing_zsh = self.runner.get_command_path("zsh")
         if existing_zsh:
             version = self.runner.get_command_version("zsh")
             self.cli.print_info(f"Zsh existant detecte: {version}")
             self.cli.print_info(f"Chemin: {existing_zsh}")
+        elif self.mode == "oh-my-zsh":
+            # Oh My Zsh mode requires Zsh to be installed
+            self.cli.print_error("Zsh n'est pas installe. Installez d'abord Zsh.")
+            return False
 
         # Check for existing Oh My Zsh installation
-        import os
         if os.path.exists(self.system_info.get_oh_my_zsh_dir()):
             self.cli.print_info("Oh My Zsh deja installe")
 
@@ -88,19 +99,25 @@ class ZshInstallerApp:
         """Interactively get installation options from user."""
         self.cli.print_section("Configuration de l'installation")
 
-        # Ask about Oh My Zsh
-        install_oh_my_zsh = self.cli.ask_yes_no(
-            "Installer Oh My Zsh (framework de configuration)?",
-            default=True
-        )
-
-        # Ask about plugins (only if Oh My Zsh is being installed)
+        # Determine what to install based on mode
+        install_oh_my_zsh = False
         install_autosuggestions = False
         install_syntax_highlighting = False
-        install_autocompletion = True
+        install_autocompletion = False
         theme = "robbyrussell"
+        set_as_default = False
 
-        if install_oh_my_zsh:
+        if self.mode == "zsh":
+            # Zsh only mode - just install Zsh
+            set_as_default = self.cli.ask_yes_no(
+                "Definir Zsh comme shell par defaut?",
+                default=True
+            )
+
+        elif self.mode == "oh-my-zsh":
+            # Oh My Zsh only mode - install Oh My Zsh and plugins
+            install_oh_my_zsh = True
+
             install_autosuggestions = self.cli.ask_yes_no(
                 "Installer zsh-autosuggestions (suggestions basees sur l'historique)?",
                 default=True
@@ -134,11 +151,51 @@ class ZshInstallerApp:
             else:
                 theme = "robbyrussell"
 
-        # Ask about default shell
-        set_as_default = self.cli.ask_yes_no(
-            "Definir Zsh comme shell par defaut?",
-            default=True
-        )
+        else:
+            # Full mode - ask everything
+            install_oh_my_zsh = self.cli.ask_yes_no(
+                "Installer Oh My Zsh (framework de configuration)?",
+                default=True
+            )
+
+            if install_oh_my_zsh:
+                install_autosuggestions = self.cli.ask_yes_no(
+                    "Installer zsh-autosuggestions (suggestions basees sur l'historique)?",
+                    default=True
+                )
+
+                install_syntax_highlighting = self.cli.ask_yes_no(
+                    "Installer zsh-syntax-highlighting (coloration syntaxique)?",
+                    default=True
+                )
+
+                install_autocompletion = self.cli.ask_yes_no(
+                    "Installer zsh-completions (completions additionnelles)?",
+                    default=True
+                )
+
+                # Theme selection
+                theme_choice = self.cli.ask_choice(
+                    "Quel theme utiliser?",
+                    [
+                        "robbyrussell (defaut, simple)",
+                        "agnoster (powerline, necessite polices speciales)",
+                        "Garder le theme par defaut"
+                    ],
+                    default=0
+                )
+
+                if theme_choice == 0:
+                    theme = "robbyrussell"
+                elif theme_choice == 1:
+                    theme = "agnoster"
+                else:
+                    theme = "robbyrussell"
+
+            set_as_default = self.cli.ask_yes_no(
+                "Definir Zsh comme shell par defaut?",
+                default=True
+            )
 
         return InstallOptions(
             install_oh_my_zsh=install_oh_my_zsh,
@@ -147,7 +204,8 @@ class ZshInstallerApp:
             install_autosuggestions=install_autosuggestions,
             set_as_default_shell=set_as_default,
             theme=theme,
-            backup_existing=True
+            backup_existing=True,
+            install_zsh=(self.mode != "oh-my-zsh")  # Don't install Zsh in oh-my-zsh mode
         )
 
     def run_installation(self, options: InstallOptions) -> bool:
@@ -185,33 +243,76 @@ class ZshInstallerApp:
         self.cli.print_section("Prochaines etapes")
 
         self.cli.print()
-        self.cli.print(f"{Colors.BOLD}1. Redemarrer le terminal{Colors.RESET}")
-        self.cli.print("   Pour que les changements de shell prennent effet")
-        self.cli.print()
 
-        self.cli.print(f"{Colors.BOLD}2. Ou executer directement:{Colors.RESET}")
-        self.cli.print("   $ zsh")
-        self.cli.print()
+        if self.mode == "zsh":
+            # Zsh only mode
+            self.cli.print(f"{Colors.BOLD}1. Redemarrer le terminal{Colors.RESET}")
+            self.cli.print("   Pour que les changements de shell prennent effet")
+            self.cli.print()
 
-        self.cli.print(f"{Colors.BOLD}3. Si le shell n'a pas change:{Colors.RESET}")
-        self.cli.print("   $ chsh -s $(which zsh)")
-        self.cli.print("   Puis se deconnecter/reconnecter")
-        self.cli.print()
+            self.cli.print(f"{Colors.BOLD}2. Ou executer directement:{Colors.RESET}")
+            self.cli.print("   $ zsh")
+            self.cli.print()
 
-        self.cli.print(f"{Colors.BOLD}Fonctionnalites installees:{Colors.RESET}")
-        self.cli.print("   - Oh My Zsh: framework de configuration")
-        self.cli.print("   - Autosuggestions: suggestions basees sur l'historique")
-        self.cli.print("   - Syntax highlighting: coloration des commandes")
-        self.cli.print("   - Completions: completions avancees")
-        self.cli.print("   - bash-completion: completions pour Bash")
-        self.cli.print()
+            self.cli.print(f"{Colors.BOLD}3. Si le shell n'a pas change:{Colors.RESET}")
+            self.cli.print("   $ chsh -s $(which zsh)")
+            self.cli.print("   Puis se deconnecter/reconnecter")
+            self.cli.print()
 
-        self.cli.print(f"{Colors.BOLD}Raccourcis utiles (Zsh):{Colors.RESET}")
-        self.cli.print("   Tab         - Autocompletion")
-        self.cli.print("   Ctrl+R      - Recherche dans l'historique")
-        self.cli.print("   ->          - Accepter la suggestion")
-        self.cli.print("   Alt+->      - Accepter un mot de la suggestion")
-        self.cli.print()
+            self.cli.print(f"{Colors.BOLD}Prochaine etape recommandee:{Colors.RESET}")
+            self.cli.print("   Installer Oh My Zsh pour une meilleure experience:")
+            self.cli.print("   $ devbootstrap  # puis selectionner 'Oh My Zsh'")
+            self.cli.print()
+
+        elif self.mode == "oh-my-zsh":
+            # Oh My Zsh only mode
+            self.cli.print(f"{Colors.BOLD}1. Recharger la configuration:{Colors.RESET}")
+            self.cli.print("   $ source ~/.zshrc")
+            self.cli.print()
+
+            self.cli.print(f"{Colors.BOLD}Fonctionnalites installees:{Colors.RESET}")
+            self.cli.print("   - Oh My Zsh: framework de configuration")
+            self.cli.print("   - Autosuggestions: suggestions basees sur l'historique")
+            self.cli.print("   - Syntax highlighting: coloration des commandes")
+            self.cli.print("   - Completions: completions avancees")
+            self.cli.print()
+
+            self.cli.print(f"{Colors.BOLD}Raccourcis utiles:{Colors.RESET}")
+            self.cli.print("   Tab         - Autocompletion")
+            self.cli.print("   Ctrl+R      - Recherche dans l'historique")
+            self.cli.print("   ->          - Accepter la suggestion")
+            self.cli.print("   Alt+->      - Accepter un mot de la suggestion")
+            self.cli.print()
+
+        else:
+            # Full mode
+            self.cli.print(f"{Colors.BOLD}1. Redemarrer le terminal{Colors.RESET}")
+            self.cli.print("   Pour que les changements de shell prennent effet")
+            self.cli.print()
+
+            self.cli.print(f"{Colors.BOLD}2. Ou executer directement:{Colors.RESET}")
+            self.cli.print("   $ zsh")
+            self.cli.print()
+
+            self.cli.print(f"{Colors.BOLD}3. Si le shell n'a pas change:{Colors.RESET}")
+            self.cli.print("   $ chsh -s $(which zsh)")
+            self.cli.print("   Puis se deconnecter/reconnecter")
+            self.cli.print()
+
+            self.cli.print(f"{Colors.BOLD}Fonctionnalites installees:{Colors.RESET}")
+            self.cli.print("   - Oh My Zsh: framework de configuration")
+            self.cli.print("   - Autosuggestions: suggestions basees sur l'historique")
+            self.cli.print("   - Syntax highlighting: coloration des commandes")
+            self.cli.print("   - Completions: completions avancees")
+            self.cli.print("   - bash-completion: completions pour Bash")
+            self.cli.print()
+
+            self.cli.print(f"{Colors.BOLD}Raccourcis utiles (Zsh):{Colors.RESET}")
+            self.cli.print("   Tab         - Autocompletion")
+            self.cli.print("   Ctrl+R      - Recherche dans l'historique")
+            self.cli.print("   ->          - Accepter la suggestion")
+            self.cli.print("   Alt+->      - Accepter un mot de la suggestion")
+            self.cli.print()
 
     def run(self) -> int:
         """Run the complete installation process."""
