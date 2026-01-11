@@ -4,7 +4,6 @@ package cli
 import (
 	"context"
 	"fmt"
-	"strings"
 
 	"github.com/keyxmare/DevBootstrap/internal/application/usecase"
 	"github.com/keyxmare/DevBootstrap/internal/config"
@@ -390,13 +389,4 @@ func (a *App) showUninstallFinalSummary(results map[string]*result.UninstallResu
 
 	a.reporter.Warning(fmt.Sprintf("Operations terminees: %d succes, %d echec(s)", successCount, failureCount))
 	return 1
-}
-
-// formatTags formats tags for display.
-func formatTags(tags []valueobject.AppTag) string {
-	parts := make([]string, 0, len(tags))
-	for _, tag := range tags {
-		parts = append(parts, fmt.Sprintf("[%s]", tag))
-	}
-	return strings.Join(parts, " ")
 }

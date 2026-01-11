@@ -7,8 +7,11 @@ import (
 	"github.com/keyxmare/DevBootstrap/internal/domain/entity"
 	"github.com/keyxmare/DevBootstrap/internal/domain/valueobject"
 	"github.com/keyxmare/DevBootstrap/internal/installer/docker"
+	"github.com/keyxmare/DevBootstrap/internal/installer/font"
+	"github.com/keyxmare/DevBootstrap/internal/installer/neovim"
 	"github.com/keyxmare/DevBootstrap/internal/installer/strategy"
 	"github.com/keyxmare/DevBootstrap/internal/installer/vscode"
+	"github.com/keyxmare/DevBootstrap/internal/installer/zsh"
 )
 
 // InstallerFactory creates installer strategies based on app ID.
@@ -32,17 +35,16 @@ func (f *InstallerFactory) GetInstaller(appID valueobject.AppID) (strategy.Insta
 		return docker.NewStrategy(f.deps, f.platform)
 	case "vscode":
 		return vscode.NewVSCodeStrategy(f.deps, f.platform)
-	// TODO: Add other installers as they are migrated
-	// case "neovim":
-	// 	return neovim.NewStrategy(f.deps, f.platform)
-	// case "neovim-config":
-	// 	return neovim.NewConfigStrategy(f.deps, f.platform)
-	// case "zsh":
-	// 	return zsh.NewStrategy(f.deps, f.platform)
-	// case "oh-my-zsh":
-	// 	return zsh.NewOhMyZshStrategy(f.deps, f.platform)
-	// case "nerd-font":
-	// 	return font.NewStrategy(f.deps, f.platform)
+	case "neovim":
+		return neovim.NewNeovimStrategy(f.deps, f.platform)
+	case "neovim-config":
+		return neovim.NewNeovimConfigStrategy(f.deps, f.platform)
+	case "zsh":
+		return zsh.NewZshStrategy(f.deps, f.platform)
+	case "oh-my-zsh":
+		return zsh.NewOhMyZshInstallerStrategy(f.deps, f.platform)
+	case "nerd-font":
+		return font.NewFontStrategy(f.deps, f.platform)
 	default:
 		return nil, fmt.Errorf("unknown application: %s", appID)
 	}
